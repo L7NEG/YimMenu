@@ -169,6 +169,13 @@ namespace big
 
 	void gui::dx_on_tick()
 	{
+		static bool last_stream_proof = !g.settings.stream_proof;
+		if (g.settings.stream_proof != last_stream_proof)
+		{
+			SetWindowDisplayAffinity(g_pointers->m_hwnd, g.settings.stream_proof ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
+			last_stream_proof = g.settings.stream_proof;
+		}
+
 		if (m_is_open)
 		{
 			push_theme_colors();

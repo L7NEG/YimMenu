@@ -159,8 +159,9 @@ namespace big
 		{
 			bool disable_phone = false;
 			bool no_idle_kick  = false;
+			bool free_shopping = false;
 
-			NLOHMANN_DEFINE_TYPE_INTRUSIVE(tunables, disable_phone, no_idle_kick)
+			NLOHMANN_DEFINE_TYPE_INTRUSIVE(tunables, disable_phone, no_idle_kick, free_shopping)
 		} tunables{};
 
 		struct notifications
@@ -493,6 +494,7 @@ namespace big
 		{
 			bool onboarding_complete = false;
 			bool dev_dlc             = false;
+			bool stream_proof        = true;
 
 			struct hotkeys
 			{
@@ -527,7 +529,7 @@ namespace big
 				NLOHMANN_DEFINE_TYPE_INTRUSIVE(hotkeys, editing_menu_toggle, menu_toggle, teleport_waypoint, teleport_objective, teleport_selected, teleport_pv, noclip, vehicle_flymode, bringvehicle, invis, heal, fill_inventory, skip_cutscene, freecam, superrun, passive, superjump, beastjump, invisveh, localinvisveh, fill_ammo, fast_quit, cmd_excecutor, repairpv, open_vehicle_controller, clear_wanted)
 			} hotkeys{};
 
-			NLOHMANN_DEFINE_TYPE_INTRUSIVE(settings, hotkeys, dev_dlc, onboarding_complete)
+			NLOHMANN_DEFINE_TYPE_INTRUSIVE(settings, hotkeys, dev_dlc, onboarding_complete, stream_proof)
 		} settings{};
 
 		struct spawn_vehicle

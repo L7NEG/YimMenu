@@ -59,6 +59,9 @@ namespace big
 		}
 
 		ImGui::SeparatorText("SETTINGS_MISC"_T.data());
+		ImGui::Checkbox("Stream Proof", &g.settings.stream_proof);
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Hides the menu and all its overlays (ESP, Aimbot) from screenshots and streaming software (OBS, Discord, etc.).");
 		ImGui::Checkbox("SETTINGS_MISC_DEV_DLC"_T.data(), &g.settings.dev_dlc);
 
 		if (ImGui::Button("VIEW_SETTINGS_RESET"_T.data()))
