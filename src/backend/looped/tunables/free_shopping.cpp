@@ -31,6 +31,11 @@ namespace big
 		{
 			// Bypass transaction limits
 			*scr_globals::transaction_overlimit.as<PBOOL>() = FALSE;
+			if (scr_globals::transaction_overlimit.is_valid())
+			{
+				*scr_globals::transaction_overlimit.as<PBOOL>() = FALSE;
+			}
+
 
 			// Set prices to 0
 			for (const auto& hash : m_tunable_hashes)
