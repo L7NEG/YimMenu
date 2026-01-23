@@ -24,6 +24,8 @@ namespace big
 		components::command_button<"clean">();
 		ImGui::SameLine();
 		components::command_button<"fillammo">();
+		ImGui::SameLine();
+		components::command_button<"forcesave">();
 
 		ImGui::SeparatorText("GENERAL"_T.data());
 
