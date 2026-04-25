@@ -1970,6 +1970,15 @@ namespace big
             {
                 g_pointers->m_gta.m_game_skeleton_update = ptr.as<PVOID>();
             }
+        },
+        // Script VM On Enter End
+        {
+            "SVMOEE",
+            "E9 ? ? ? ? 44 0F B6 4F ? 44 0F B6 47",
+            [](memory::handle ptr)
+            {
+                g_pointers->m_gta.m_script_vm_on_enter_end = ptr.as<PVOID>();
+            }
         }
         >(); // don't leave a trailing comma at the end
 
@@ -1987,7 +1996,7 @@ namespace big
         // Update instructions: Scan 48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 41 56 41 57 48 83 EC 40 41 8B E9 and xref it to get to the vtable. Xref the vtable and generate a new signature
         {
             "PD",
-            "48 8D 05 ? ? ? ? 48 8B F9 48 89 01 48 83 C1 08 E8 ? ? ? ? 33 C0",
+            "48 8D 05 ? ? ? ? 48 8B F9 48 89 01 48 83 C1 08 E8",
             [](memory::handle ptr)
             {
                 auto presence_data_vft             = ptr.add(3).rip().as<PVOID*>();
