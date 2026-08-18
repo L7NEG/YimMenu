@@ -171,7 +171,7 @@ namespace big
 			if (g.self.free_shopping_refund && result)
 				do_refund();
 
-			src->set_return_value<BOOL>(result);
+			src->set_return_value<BOOL>(std::move(result));
 		}
 
 		void NET_GAMESERVER_GET_CATALOG_CLOUD_CRC(rage::scrNativeCallContext* src)
