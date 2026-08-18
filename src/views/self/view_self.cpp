@@ -50,12 +50,7 @@ namespace big
 			}
 			if (ImGui::IsItemHovered())
 			{
-				ImGui::SetTooltip("Makes everything free. A REAL full-price transaction is fired so the server records ownership (persists across sessions), then the money is refunded automatically.\nWallet is topped up on enable.\nBan risk: use on a burner account.");
-			}
-			ImGui::Checkbox("Free Renovate", &g.self.free_renovate);
-			if (ImGui::IsItemHovered())
-			{
-				ImGui::SetTooltip("Makes property upgrades/renovations free. Same real-transaction + auto-refund mechanism.\nBan risk: use on a burner account.");
+				ImGui::SetTooltip("Makes everything free (store purchases + property upgrades). Real transaction fires so ownership persists, money refunded automatically.\nWallet topped up on enable.\nBan risk: use on a burner account.");
 			}
 		}
 		if (ImGui::Button("Force Cloud Save"))
