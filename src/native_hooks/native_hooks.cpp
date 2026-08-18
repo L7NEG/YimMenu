@@ -145,12 +145,9 @@ namespace big
 		add_native_detour(NativeIndex::NETWORK_GET_VC_BANK_BALANCE, shop_controller::NETWORK_GET_VC_BANK_BALANCE);
 		add_native_detour(NativeIndex::NETWORK_GET_VC_BALANCE, shop_controller::NETWORK_GET_VC_BALANCE);
 		add_native_detour(NativeIndex::NETWORK_GET_VC_WALLET_BALANCE, shop_controller::NETWORK_GET_VC_WALLET_BALANCE);
-		add_native_detour("shop_controller"_J, NativeIndex::NETWORK_GET_CAN_SPEND_FROM_WALLET, shop_controller::NETWORK_GET_CAN_SPEND_FROM_WALLET);
-		add_native_detour("shop_controller"_J, NativeIndex::NETWORK_GET_CAN_SPEND_FROM_BANK, shop_controller::NETWORK_GET_CAN_SPEND_FROM_BANK);
-		add_native_detour("shop_controller"_J, NativeIndex::NETWORK_GET_CAN_SPEND_FROM_BANK_AND_WALLET, shop_controller::NETWORK_GET_CAN_SPEND_FROM_BANK_AND_WALLET);
-		add_native_detour("am_mp_property_int"_J, NativeIndex::NETWORK_GET_CAN_SPEND_FROM_WALLET, shop_controller::NETWORK_GET_CAN_SPEND_FROM_WALLET);
-		add_native_detour("am_mp_property_int"_J, NativeIndex::NETWORK_GET_CAN_SPEND_FROM_BANK, shop_controller::NETWORK_GET_CAN_SPEND_FROM_BANK);
-		add_native_detour("am_mp_property_int"_J, NativeIndex::NETWORK_GET_CAN_SPEND_FROM_BANK_AND_WALLET, shop_controller::NETWORK_GET_CAN_SPEND_FROM_BANK_AND_WALLET);
+		add_native_detour(NativeIndex::NETWORK_GET_CAN_SPEND_FROM_WALLET, shop_controller::NETWORK_GET_CAN_SPEND_FROM_WALLET);
+		add_native_detour(NativeIndex::NETWORK_GET_CAN_SPEND_FROM_BANK, shop_controller::NETWORK_GET_CAN_SPEND_FROM_BANK);
+		add_native_detour(NativeIndex::NETWORK_GET_CAN_SPEND_FROM_BANK_AND_WALLET, shop_controller::NETWORK_GET_CAN_SPEND_FROM_BANK_AND_WALLET);
 		add_native_detour(NativeIndex::NETWORK_GET_EVC_BALANCE, shop_controller::NETWORK_GET_EVC_BALANCE);
 		add_native_detour(NativeIndex::NETWORK_GET_PVC_BALANCE, shop_controller::NETWORK_GET_PVC_BALANCE);
 		add_native_detour(NativeIndex::NETWORK_GET_STRING_WALLET_BALANCE, shop_controller::NETWORK_GET_STRING_WALLET_BALANCE);
