@@ -30,21 +30,28 @@ namespace big
 		ImGui::BeginGroup();
 
 		components::command_checkbox<"godmode">();
-		if (ImGui::Checkbox("Free Shopping", &g.self.free_shopping))
 		{
-			// Setting changed
-		}
-		if (ImGui::IsItemHovered())
-		{
-			ImGui::SetTooltip("Allows you to purchase items for free. Works with shops, services, and websites (Legendary Motorsport, etc.).\nNote: Purchases made with this active are now server-side and should be permanent.");
-		}
-		if (ImGui::Checkbox("Free Shopping (Refund)", &g.self.free_shopping_refund))
-		{
-			// Setting changed
-		}
-		if (ImGui::IsItemHovered())
-		{
-			ImGui::SetTooltip("Cherax-style refund approach. Lets the real server transaction go through (so ownership persists), then refunds the money back to you.");
+			static bool free_shopping_was_enabled = false;
+			if (ImGui::Checkbox("Free Shopping", &g.self.free_shopping_refund))
+			{
+				if (g.self.free_shopping_refund && !free_shopping_was_enabled)
+				{
+					g_fiber_pool->queue_job([] {
+						const auto wallet = MONEY::NETWORK_GET_VC_WALLET_BALANCE(self::char_index);
+						constexpr int floor = 500'000'000;
+						if (wallet < floor)
+						{
+							MONEY::NETWORK_REFUND_CASH(floor - wallet, "FREE_SHOPPING", "Free Shopping Refund", true);
+							g_notification_service.push_success("Free Shopping", "Wallet topped up so full-price purchases can go through.");
+						}
+					});
+				}
+				free_shopping_was_enabled = g.self.free_shopping_refund;
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Cherax-style refund approach. Lets the real server transaction go through (so ownership persists server-side), then refunds the money back.\nA wallet top-up is triggered on enable so the server accepts the full-price purchase.\nBan risk: use on a burner account.");
+			}
 		}
 		if (ImGui::Button("Force Cloud Save"))
 		{
