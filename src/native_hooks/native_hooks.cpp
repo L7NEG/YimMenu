@@ -126,6 +126,7 @@ namespace big
 		add_native_detour(NativeIndex::NET_GAMESERVER_BASKET_START, shop_controller::NET_GAMESERVER_BASKET_START);
 		add_native_detour(NativeIndex::NET_GAMESERVER_BASKET_ADD_ITEM, shop_controller::NET_GAMESERVER_BASKET_ADD_ITEM);
 		add_native_detour(NativeIndex::NET_GAMESERVER_BASKET_END, shop_controller::NET_GAMESERVER_BASKET_END);
+		add_native_detour(NativeIndex::NET_GAMESERVER_END_SERVICE, shop_controller::REFUND_TRANSACTION);
 		add_native_detour(NativeIndex::NETWORK_BUY_ITEM, shop_controller::NETWORK_BUY_ITEM);
 		add_native_detour(NativeIndex::NETWORK_BUY_PROPERTY, shop_controller::NETWORK_BUY_PROPERTY);
 		add_native_detour(NativeIndex::NETWORK_DEDUCT_CASH, shop_controller::NETWORK_DEDUCT_CASH);

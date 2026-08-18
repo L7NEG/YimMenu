@@ -38,6 +38,14 @@ namespace big
 		{
 			ImGui::SetTooltip("Allows you to purchase items for free. Works with shops, services, and websites (Legendary Motorsport, etc.).\nNote: Purchases made with this active are now server-side and should be permanent.");
 		}
+		if (ImGui::Checkbox("Free Shopping (Refund)", &g.self.free_shopping_refund))
+		{
+			// Setting changed
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Cherax-style refund approach. Lets the real server transaction go through (so ownership persists), then refunds the money back to you.");
+		}
 		if (ImGui::Button("Force Cloud Save"))
 		{
 			g_fiber_pool->queue_job([] {
