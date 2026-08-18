@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include "native_hooks.hpp"
 #include "core/scr_globals.hpp"
 #include "util/math.hpp"
@@ -17,16 +18,16 @@ namespace big
 			return formatted;
 		}
 
-		// Balance stat hashes that shop_controller checks to decide if you can afford something.
-		// We return INT32_MAX for all of them when free_shopping_refund is on so the script never
-		// shows "Not enough money" and always fires the REAL server transaction — which is
-		// what actually records ownership (penthouse, garage, etc.) on Rockstar's backend.
-		// The actual money deduction is blocked separately by the NETWORK_BUY_*/NETWORK_DEDUCT_CASH hooks.
-
-		// Refund global monitoring (Cherax-style) - tracks transaction state for persistence
-		// Global_4515492 is the transaction global structure that tracks all shopping transactions
-		// f_65 contains the transaction handle and state flags
-		static constexpr int kMaxTransactionHistory = 128;
+		// Free shopping implemented the way L7NEG's YimMenu fork does it:
+		//  1. Spoof balance/can-spend checks so the shop script always lets the purchase through.
+		//  2. Zero the item's Value field inside NET_GAMESERVER_BASKET_ADD_ITEM so the basket
+		//     (and thus the transaction the server records) is free.
+		//  3. Zero the amount on the money-deduction natives so nothing is charged.
+		//  4. Force a cloud save right after a successful purchase so the ownership stats
+		//     (property, garage, etc.) sync to Rockstar's backend.
+		//
+		// The basket value is zeroed, not the item's catalog identity, so the purchase
+		// itself is structurally valid; the money deduction is cancelled client-side.
 
 		static constexpr std::array<Hash, 6> sc_balance_stats = {
 			"MP0_CHAR_BANK_BALANCE_0"_J,
@@ -46,7 +47,7 @@ namespace big
 			BOOL result = STATS::STAT_GET_INT(stat_hash, out, p2);
 
 			// Spoof balance stats to INT32_MAX so the script always thinks you can afford anything.
-			if (g.self.free_shopping_refund && out)
+			if (g.self.free_shopping && out)
 			{
 				for (const auto& h : sc_balance_stats)
 				{
@@ -111,19 +112,6 @@ namespace big
 			src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_CATALOG_IS_VALID());
 		}
 
-		// Tracks the total amount charged in the current transaction for refund purposes
-		inline int g_refund_amount = 0;
-
-		// Refund a successfully completed purchase (Cherax-style refund global approach)
-		inline void do_refund()
-		{
-			if (g_refund_amount > 0)
-			{
-				MONEY::NETWORK_REFUND_CASH(g_refund_amount, "FREE_SHOPPING", "Free Shopping Refund", true);
-				g_refund_amount = 0;
-			}
-		}
-
 		void NET_GAMESERVER_BEGIN_SERVICE(rage::scrNativeCallContext* src)
 		{
 			auto transactionId = src->get_arg<int*>(0);
@@ -133,40 +121,18 @@ namespace big
 			auto value = src->get_arg<int>(4);
 			auto flags = src->get_arg<int>(5);
 
-			// Refund approach: let the real transaction go through so the server records
-			// ownership (persistence), then refund the money back to the player.
-			if (g.self.free_shopping_refund)
-			{
-				g_refund_amount += value;
-			}
-
 			src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BEGIN_SERVICE(transactionId, categoryHash, itemHash, actionTypeHash, value, flags));
 		}
 
 		void NET_GAMESERVER_USE_SERVER_TRANSACTIONS(rage::scrNativeCallContext *src)
 		{
-			if (g.self.free_shopping_refund)
-			{
-				src->set_return_value<BOOL>(TRUE);
-				return;
-			}
 			src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_USE_SERVER_TRANSACTIONS());
 		}
 
-		// Refund global monitoring - Cherax-style
-		// Refunds the tracked amount after a transaction completes so the server records
-		// the full-price purchase (persistence) while the player gets the money back.
-		void REFUND_TRANSACTION(rage::scrNativeCallContext* src)
+		void NET_GAMESERVER_END_SERVICE(rage::scrNativeCallContext* src)
 		{
 			auto transactionId = src->get_arg<int>(0);
-
-			// Always call the real native so the transaction actually completes
-			BOOL result = NETSHOPPING::NET_GAMESERVER_END_SERVICE(transactionId);
-
-			if (g.self.free_shopping_refund && result)
-				do_refund();
-
-			src->set_return_value<BOOL>(std::move(result));
+			src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_END_SERVICE(transactionId));
 		}
 
 		void NET_GAMESERVER_GET_CATALOG_CLOUD_CRC(rage::scrNativeCallContext* src)
@@ -257,6 +223,13 @@ namespace big
 			auto itemData = src->get_arg<int*>(0);
 			auto quantity = src->get_arg<int>(1);
 
+			// item is a 4 element SCR struct: PrimaryHash @ 0x0, SecondaryHash @ 0x8,
+			// Value (price) @ 0x10, StatValue @ 0x18
+			if (g.self.free_shopping && itemData)
+			{
+				*reinterpret_cast<std::uint64_t*>(reinterpret_cast<std::uint8_t*>(itemData) + 0x10) = 0;
+			}
+
 			src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM((Any*)itemData, quantity));
 		}
 
@@ -278,7 +251,13 @@ namespace big
 			auto p8 = src->get_arg<Any>(8);
 			auto p9 = src->get_arg<BOOL>(9);
 
+			if (g.self.free_shopping)
+				amount = 0;
+
 			MONEY::NETWORK_BUY_ITEM(amount, item, p2, p3, p4, item_name, p6, p7, p8, p9);
+
+			if (g.self.free_shopping)
+				STATS::STAT_SAVE(0, 0, 3, 0);
 		}
 
 		void NETWORK_BUY_PROPERTY(rage::scrNativeCallContext* src)
@@ -288,7 +267,13 @@ namespace big
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<BOOL>(3);
 
+			if (g.self.free_shopping)
+				cost = 0;
+
 			MONEY::NETWORK_BUY_PROPERTY(cost, propertyName, p2, p3);
+
+			if (g.self.free_shopping)
+				STATS::STAT_SAVE(0, 0, 3, 0);
 		}
 
 		void NETWORK_DEDUCT_CASH(rage::scrNativeCallContext* src)
@@ -300,7 +285,13 @@ namespace big
 			auto p4 = src->get_arg<BOOL>(4);
 			auto p5 = src->get_arg<BOOL>(5);
 
+			if (g.self.free_shopping)
+				amount = 0;
+
 			MONEY::NETWORK_DEDUCT_CASH(amount, p1, p2, p3, p4, p5);
+
+			if (g.self.free_shopping)
+				STATS::STAT_SAVE(0, 0, 3, 0);
 		}
 
 		void NETWORK_BUY_HEALTHCARE(rage::scrNativeCallContext* src)
@@ -538,7 +529,13 @@ namespace big
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
 
+			if (g.self.free_shopping)
+				amount = 0;
+
 			MONEY::NETWORK_SPENT_UPGRADE_OFFICE_GARAGE(amount, p1, p2, p3);
+
+			if (g.self.free_shopping)
+				STATS::STAT_SAVE(0, 0, 3, 0);
 		}
 
 		void NETWORK_SPENT_PURCHASE_OFFICE_GARAGE(rage::scrNativeCallContext* src)
@@ -548,7 +545,13 @@ namespace big
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
 
+			if (g.self.free_shopping)
+				amount = 0;
+
 			MONEY::NETWORK_SPENT_PURCHASE_OFFICE_GARAGE(amount, p1, p2, p3);
+
+			if (g.self.free_shopping)
+				STATS::STAT_SAVE(0, 0, 3, 0);
 		}
 
 		void NETWORK_SPENT_UPGRADE_HANGAR(rage::scrNativeCallContext* src)
@@ -934,12 +937,18 @@ namespace big
 			auto p6 = src->get_arg<const char*>(6);
 			auto data = src->get_arg<Any*>(7);
 
+			if (g.self.free_shopping)
+				price = 0;
+
 			MONEY::_NETWORK_SPENT_GENERIC(price, p1, p2, stat, spent, p5, p6, data);
+
+			if (g.self.free_shopping)
+				STATS::STAT_SAVE(0, 0, 3, 0);
 		}
 
 		void NETWORK_CAN_SPEND_MONEY(rage::scrNativeCallContext* src)
 		{
-			if (g.self.free_shopping_refund)
+			if (g.self.free_shopping)
 			{
 				src->set_return_value<BOOL>(TRUE);
 				return;
@@ -955,7 +964,7 @@ namespace big
 
 		void NETWORK_CAN_SPEND_MONEY2(rage::scrNativeCallContext* src)
 		{
-			if (g.self.free_shopping_refund)
+			if (g.self.free_shopping)
 			{
 				src->set_return_value<BOOL>(TRUE);
 				return;
@@ -972,7 +981,7 @@ namespace big
 
 		void NETWORK_GET_CAN_SPEND_FROM_WALLET(rage::scrNativeCallContext* src)
 		{
-			if (g.self.free_shopping_refund)
+			if (g.self.free_shopping)
 			{
 				src->set_return_value<BOOL>(TRUE);
 				return;
@@ -982,7 +991,7 @@ namespace big
 
 		void NETWORK_GET_CAN_SPEND_FROM_BANK(rage::scrNativeCallContext* src)
 		{
-			if (g.self.free_shopping_refund)
+			if (g.self.free_shopping)
 			{
 				src->set_return_value<BOOL>(TRUE);
 				return;
@@ -992,7 +1001,7 @@ namespace big
 
 		void NETWORK_GET_CAN_SPEND_FROM_BANK_AND_WALLET(rage::scrNativeCallContext* src)
 		{
-			if (g.self.free_shopping_refund)
+			if (g.self.free_shopping)
 			{
 				src->set_return_value<BOOL>(TRUE);
 				return;

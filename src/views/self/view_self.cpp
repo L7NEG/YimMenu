@@ -31,26 +31,10 @@ namespace big
 
 		components::command_checkbox<"godmode">();
 		{
-			static bool free_shopping_was_enabled = false;
-			if (ImGui::Checkbox("Free Shopping", &g.self.free_shopping_refund))
-			{
-				if (g.self.free_shopping_refund && !free_shopping_was_enabled)
-				{
-					g_fiber_pool->queue_job([] {
-						const auto wallet = MONEY::NETWORK_GET_VC_WALLET_BALANCE(self::char_index);
-						constexpr int floor = 500'000'000;
-						if (wallet < floor)
-						{
-							MONEY::NETWORK_REFUND_CASH(floor - wallet, "FREE_SHOPPING", "Free Shopping Refund", true);
-							g_notification_service.push_success("Free Shopping", "Wallet topped up so full-price purchases can go through.");
-						}
-					});
-				}
-				free_shopping_was_enabled = g.self.free_shopping_refund;
-			}
+			ImGui::Checkbox("Free Shopping", &g.self.free_shopping);
 			if (ImGui::IsItemHovered())
 			{
-				ImGui::SetTooltip("Cherax-style refund approach. Lets the real server transaction go through (so ownership persists server-side), then refunds the money back.\nA wallet top-up is triggered on enable so the server accepts the full-price purchase.\nBan risk: use on a burner account.");
+				ImGui::SetTooltip("Buy anything in the in-game store for free. The basket value and money deduction are zeroed so nothing is charged, and a cloud save is forced after each purchase so the ownership stats sync.\nBan risk: use on a burner account.");
 			}
 		}
 		if (ImGui::Button("Force Cloud Save"))

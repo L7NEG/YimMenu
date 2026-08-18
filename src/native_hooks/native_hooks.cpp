@@ -104,6 +104,8 @@ namespace big
 		add_native_detour("shop_controller"_J, NativeIndex::SET_WARNING_MESSAGE_WITH_HEADER, shop_controller::SET_WARNING_MESSAGE_WITH_HEADER);
 		add_native_detour("shop_controller"_J, NativeIndex::SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT, shop_controller::SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT);
 		add_native_detour("shop_controller"_J, NativeIndex::STAT_GET_INT, shop_controller::STAT_GET_INT);
+		add_native_detour("am_mp_property_int"_J, NativeIndex::STAT_GET_INT, shop_controller::STAT_GET_INT);
+		add_native_detour("am_mp_property_int"_J, NativeIndex::NET_GAMESERVER_BASKET_ADD_ITEM, shop_controller::NET_GAMESERVER_BASKET_ADD_ITEM);
 		add_native_detour(NativeIndex::NET_GAMESERVER_GET_PRICE, shop_controller::NET_GAMESERVER_GET_PRICE);
 		add_native_detour(NativeIndex::NET_GAMESERVER_CATALOG_ITEM_IS_VALID, shop_controller::NET_GAMESERVER_CATALOG_ITEM_IS_VALID);
 		add_native_detour(NativeIndex::NET_GAMESERVER_CATALOG_ITEM_KEY_IS_VALID, shop_controller::NET_GAMESERVER_CATALOG_ITEM_KEY_IS_VALID);
@@ -126,7 +128,7 @@ namespace big
 		add_native_detour(NativeIndex::NET_GAMESERVER_BASKET_START, shop_controller::NET_GAMESERVER_BASKET_START);
 		add_native_detour(NativeIndex::NET_GAMESERVER_BASKET_ADD_ITEM, shop_controller::NET_GAMESERVER_BASKET_ADD_ITEM);
 		add_native_detour(NativeIndex::NET_GAMESERVER_BASKET_END, shop_controller::NET_GAMESERVER_BASKET_END);
-		add_native_detour(NativeIndex::NET_GAMESERVER_END_SERVICE, shop_controller::REFUND_TRANSACTION);
+		add_native_detour(NativeIndex::NET_GAMESERVER_END_SERVICE, shop_controller::NET_GAMESERVER_END_SERVICE);
 		add_native_detour(NativeIndex::NETWORK_BUY_ITEM, shop_controller::NETWORK_BUY_ITEM);
 		add_native_detour(NativeIndex::NETWORK_BUY_PROPERTY, shop_controller::NETWORK_BUY_PROPERTY);
 		add_native_detour(NativeIndex::NETWORK_DEDUCT_CASH, shop_controller::NETWORK_DEDUCT_CASH);
@@ -146,6 +148,9 @@ namespace big
 		add_native_detour("shop_controller"_J, NativeIndex::NETWORK_GET_CAN_SPEND_FROM_WALLET, shop_controller::NETWORK_GET_CAN_SPEND_FROM_WALLET);
 		add_native_detour("shop_controller"_J, NativeIndex::NETWORK_GET_CAN_SPEND_FROM_BANK, shop_controller::NETWORK_GET_CAN_SPEND_FROM_BANK);
 		add_native_detour("shop_controller"_J, NativeIndex::NETWORK_GET_CAN_SPEND_FROM_BANK_AND_WALLET, shop_controller::NETWORK_GET_CAN_SPEND_FROM_BANK_AND_WALLET);
+		add_native_detour("am_mp_property_int"_J, NativeIndex::NETWORK_GET_CAN_SPEND_FROM_WALLET, shop_controller::NETWORK_GET_CAN_SPEND_FROM_WALLET);
+		add_native_detour("am_mp_property_int"_J, NativeIndex::NETWORK_GET_CAN_SPEND_FROM_BANK, shop_controller::NETWORK_GET_CAN_SPEND_FROM_BANK);
+		add_native_detour("am_mp_property_int"_J, NativeIndex::NETWORK_GET_CAN_SPEND_FROM_BANK_AND_WALLET, shop_controller::NETWORK_GET_CAN_SPEND_FROM_BANK_AND_WALLET);
 		add_native_detour(NativeIndex::NETWORK_GET_EVC_BALANCE, shop_controller::NETWORK_GET_EVC_BALANCE);
 		add_native_detour(NativeIndex::NETWORK_GET_PVC_BALANCE, shop_controller::NETWORK_GET_PVC_BALANCE);
 		add_native_detour(NativeIndex::NETWORK_GET_STRING_WALLET_BALANCE, shop_controller::NETWORK_GET_STRING_WALLET_BALANCE);
