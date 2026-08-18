@@ -1,6 +1,5 @@
 #pragma once
 #include <cstdint>
-#include "fiber_pool.hpp"
 #include "native_hooks.hpp"
 #include "core/scr_globals.hpp"
 #include "util/math.hpp"
@@ -19,18 +18,19 @@ namespace big
 			return formatted;
 		}
 
-		// Free shopping implemented the way Cherax (and L7NEG's YimMenu fork) do it:
-		//  - Free Shopping (g.self.free_shopping): store purchases (basket flow +
-		//    NETWORK_BUY_*/NETWORK_DEDUCT_CASH).
-		//  - Free Renovate (g.self.free_renovate): property upgrades/renovations
+		// Free shopping implemented the way Cherax and L7NEG's YimMenu fork do it:
+		//  - Free Shopping (g.self.free_shopping): covers store purchases
+		//    (basket flow + NETWORK_BUY_*/NETWORK_DEDUCT_CASH).
+		//  - Free Renovate (g.self.free_renovate): covers property upgrades/renovations
 		//    (the NETWORK_SPENT_*/NETWORK_SPEND_* family).
 		//
-		// A REAL full-price server transaction always fires — that is what records
-		// ownership on Rockstar's backend so it persists across sessions. The money
-		// the server charges is then refunded back to the player automatically
-		// (NETWORK_REFUND_CASH, queued on the fiber pool so it runs after the charge).
-		// Server transactions are forced on so the purchase is never client-side.
-		// Balance/can-spend stats are spoofed so the script always lets it through.
+		//  1. NET_GAMESERVER_USE_SERVER_TRANSACTIONS returns FALSE so the $0 transaction
+		//     isn't rejected by server-side validation; ownership syncs via STAT_SAVE.
+		//  2. NET_GAMESERVER_BEGIN_SERVICE zeroes the charge value.
+		//  3. Balance/can-spend stats are spoofed so the script always lets the purchase through.
+		//  4. The money-deduction natives are zeroed so nothing is charged.
+		//  5. A cloud save is forced after a successful purchase so the ownership stats
+		//     (property, garage, etc.) sync to Rockstar's backend.
 
 		static constexpr std::array<Hash, 6> sc_balance_stats = {
 			"MP0_CHAR_BANK_BALANCE_0"_J,
@@ -40,17 +40,6 @@ namespace big
 			"BANK_BALANCE"_J,
 			"WALLET_BALANCE"_J,
 		};
-
-		// Queue a refund for the charged amount. Runs on the fiber pool so it fires
-		// AFTER the purchase charge has been applied server-side, keeping the purchase
-		// legitimate (it persists) while returning the money to the player.
-		inline void refund(int amount)
-		{
-			if (amount > 0)
-				g_fiber_pool->queue_job([amount] {
-					MONEY::NETWORK_REFUND_CASH(amount, "FREE_SHOPPING", "Free Shopping Refund", true);
-				});
-		}
 
 		void STAT_GET_INT(rage::scrNativeCallContext* src)
 		{
@@ -135,18 +124,21 @@ namespace big
 			auto value = src->get_arg<int>(4);
 			auto flags = src->get_arg<int>(5);
 
-			// Keep the real price so the server accepts and records the purchase
-			// (that is what makes ownership persist); the money is refunded after
-			// the deduction natives apply the charge.
+			// value is the amount the server charges; zeroing it makes the transaction free
+			// without submitting a $0 basket (which some items reject).
+			if (g.self.free_shopping || g.self.free_renovate)
+				value = 0;
+
 			src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BEGIN_SERVICE(transactionId, categoryHash, itemHash, actionTypeHash, value, flags));
 		}
 
 		void NET_GAMESERVER_USE_SERVER_TRANSACTIONS(rage::scrNativeCallContext *src)
 		{
-			// Force REAL server transactions so the server records ownership (persists).
+			// Disable server-side transaction validation so the $0 transaction isn't rejected;
+			// ownership then syncs through the forced STAT_SAVE instead.
 			if (g.self.free_shopping || g.self.free_renovate)
 			{
-				src->set_return_value<BOOL>(TRUE);
+				src->set_return_value<BOOL>(FALSE);
 				return;
 			}
 			src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_USE_SERVER_TRANSACTIONS());
@@ -268,9 +260,12 @@ namespace big
 			auto p9 = src->get_arg<BOOL>(9);
 
 			if (g.self.free_shopping)
-				refund(amount);
+				amount = 0;
 
 			MONEY::NETWORK_BUY_ITEM(amount, item, p2, p3, p4, item_name, p6, p7, p8, p9);
+
+			if (g.self.free_shopping)
+				STATS::STAT_SAVE(0, 0, 3, 0);
 		}
 
 		void NETWORK_BUY_PROPERTY(rage::scrNativeCallContext* src)
@@ -281,9 +276,12 @@ namespace big
 			auto p3 = src->get_arg<BOOL>(3);
 
 			if (g.self.free_shopping)
-				refund(cost);
+				cost = 0;
 
 			MONEY::NETWORK_BUY_PROPERTY(cost, propertyName, p2, p3);
+
+			if (g.self.free_shopping)
+				STATS::STAT_SAVE(0, 0, 3, 0);
 		}
 
 		void NETWORK_DEDUCT_CASH(rage::scrNativeCallContext* src)
@@ -296,7 +294,7 @@ namespace big
 			auto p5 = src->get_arg<BOOL>(5);
 
 			if (g.self.free_shopping || g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 
 			MONEY::NETWORK_DEDUCT_CASH(amount, p1, p2, p3, p4, p5);
 		}
@@ -305,7 +303,7 @@ namespace big
 		{
 			auto cost = src->get_arg<int>(0);
 			if (g.self.free_shopping)
-				refund(cost);
+				cost = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 
@@ -316,7 +314,7 @@ namespace big
 		{
 			auto cost = src->get_arg<int>(0);
 			if (g.self.free_shopping)
-				refund(cost);
+				cost = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -328,7 +326,7 @@ namespace big
 		{
 			auto cost = src->get_arg<int>(0);
 			if (g.self.free_shopping)
-				refund(cost);
+				cost = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -340,7 +338,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_shopping)
-				refund(amount);
+				amount = 0;
 			auto victim = src->get_arg<Player>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<BOOL>(3);
@@ -353,7 +351,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_shopping)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<BOOL>(3);
@@ -366,7 +364,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 
@@ -377,7 +375,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 
@@ -388,7 +386,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 
@@ -439,7 +437,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_shopping)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<int>(1);
 
 			MONEY::NETWORK_CASINO_BUY_CHIPS(amount, p1);
@@ -449,7 +447,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -462,7 +460,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -475,7 +473,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -487,7 +485,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -499,7 +497,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -511,7 +509,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any*>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<BOOL>(3);
@@ -523,7 +521,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -535,7 +533,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -547,7 +545,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -559,7 +557,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -575,7 +573,7 @@ namespace big
 			auto p3 = src->get_arg<Any>(3);
 
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 
 			MONEY::NETWORK_SPENT_UPGRADE_OFFICE_GARAGE(amount, p1, p2, p3);
 		}
@@ -588,7 +586,7 @@ namespace big
 			auto p3 = src->get_arg<Any>(3);
 
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 
 			MONEY::NETWORK_SPENT_PURCHASE_OFFICE_GARAGE(amount, p1, p2, p3);
 		}
@@ -597,7 +595,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -609,7 +607,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -621,7 +619,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -633,7 +631,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -645,7 +643,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -657,7 +655,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -669,7 +667,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -681,7 +679,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -693,7 +691,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -705,7 +703,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -717,7 +715,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -729,7 +727,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -741,7 +739,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -753,7 +751,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -765,7 +763,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<const char*>(3);
@@ -777,7 +775,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<const char*>(3);
@@ -789,7 +787,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<Any*>(3);
@@ -801,7 +799,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<Any*>(3);
@@ -813,7 +811,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -825,7 +823,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -837,7 +835,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -849,7 +847,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -861,7 +859,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -873,7 +871,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -885,7 +883,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -897,7 +895,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -909,7 +907,7 @@ namespace big
 		{
 			auto p0 = src->get_arg<Any>(0);
 			if (g.self.free_renovate)
-				refund(p0);
+				p0 = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -921,7 +919,7 @@ namespace big
 		{
 			auto p0 = src->get_arg<Any>(0);
 			if (g.self.free_renovate)
-				refund(p0);
+				p0 = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -933,7 +931,7 @@ namespace big
 		{
 			auto p0 = src->get_arg<Any>(0);
 			if (g.self.free_renovate)
-				refund(p0);
+				p0 = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -945,7 +943,7 @@ namespace big
 		{
 			auto p0 = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(p0);
+				p0 = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<int>(3);
@@ -957,7 +955,7 @@ namespace big
 		{
 			auto p0 = src->get_arg<Any>(0);
 			if (g.self.free_renovate)
-				refund(p0);
+				p0 = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -969,7 +967,7 @@ namespace big
 		{
 			auto p0 = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(p0);
+				p0 = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<int>(3);
@@ -981,7 +979,7 @@ namespace big
 		{
 			auto p0 = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(p0);
+				p0 = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<int>(3);
@@ -993,7 +991,7 @@ namespace big
 		{
 			auto p0 = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(p0);
+				p0 = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<int>(3);
@@ -1005,7 +1003,7 @@ namespace big
 		{
 			auto p0 = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(p0);
+				p0 = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<int>(3);
@@ -1019,7 +1017,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<Hash>(3);
@@ -1031,7 +1029,7 @@ namespace big
 		{
 			auto amount = src->get_arg<int>(0);
 			if (g.self.free_renovate)
-				refund(amount);
+				amount = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<Hash>(3);
@@ -1051,7 +1049,7 @@ namespace big
 			auto data = src->get_arg<Any*>(7);
 
 			if (g.self.free_renovate)
-				refund(price);
+				price = 0;
 
 			MONEY::_NETWORK_SPENT_GENERIC(price, p1, p2, stat, spent, p5, p6, data);
 		}

@@ -31,31 +31,15 @@ namespace big
 
 		components::command_checkbox<"godmode">();
 		{
-			static bool free_shopping_was_enabled = false;
-			if (ImGui::Checkbox("Free Shopping", &g.self.free_shopping))
-			{
-				if (g.self.free_shopping && !free_shopping_was_enabled)
-				{
-					g_fiber_pool->queue_job([] {
-						const auto wallet = MONEY::NETWORK_GET_VC_WALLET_BALANCE(self::char_index);
-						constexpr int floor = 500'000'000;
-						if (wallet < floor)
-						{
-							MONEY::NETWORK_REFUND_CASH(floor - wallet, "FREE_SHOPPING", "Free Shopping Refund", true);
-							g_notification_service.push_success("Free Shopping", "Wallet topped up so full-price purchases can go through.");
-						}
-					});
-				}
-				free_shopping_was_enabled = g.self.free_shopping;
-			}
+			ImGui::Checkbox("Free Shopping", &g.self.free_shopping);
 			if (ImGui::IsItemHovered())
 			{
-				ImGui::SetTooltip("Buy items in the in-game store for free. A REAL full-price transaction is fired so the server records ownership (persists across sessions), then the money is refunded automatically.\nA wallet top-up is triggered on enable so the server accepts the purchase.\nBan risk: use on a burner account.");
+				ImGui::SetTooltip("Buy items in the in-game store for free. The transaction value and money deduction are zeroed so nothing is charged, and a cloud save is forced after each purchase so the ownership stats sync.\nBan risk: use on a burner account.");
 			}
 			ImGui::Checkbox("Free Renovate", &g.self.free_renovate);
 			if (ImGui::IsItemHovered())
 			{
-				ImGui::SetTooltip("Renovate and upgrade properties for free (office garages, decor, nightclub/bunker upgrades, etc.). Same real-transaction + auto-refund mechanism.\nBan risk: use on a burner account.");
+				ImGui::SetTooltip("Renovate and upgrade properties for free (office garages, decor, nightclub/bunker upgrades, etc.). The transaction value and money deduction are zeroed.\nBan risk: use on a burner account.");
 			}
 		}
 		if (ImGui::Button("Force Cloud Save"))
