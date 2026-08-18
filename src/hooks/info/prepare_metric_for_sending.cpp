@@ -86,7 +86,7 @@ namespace big
 		return result;
 	}
 
-	bool hooks::prepare_metric_for_sending(rage::json_serializer* serializer, int unk, int time, rage::rlMetric* metric)
+	bool hooks::prepare_metric_for_sending(rage::json_serializer* serializer, bool* failed, char* unk, uint64_t time, rage::rlMetric* metric)
 	{
 		char metric_json_buffer [256] {};
 		rage::json_serializer yim_serializer(metric_json_buffer, sizeof(metric_json_buffer));
@@ -117,7 +117,7 @@ namespace big
 				if (result.size() != data.size())
 					LOG(INFO) << "Removed YimMenu DLL from MM metric";
 				strncpy(reinterpret_cast<char*>(metric) + 0x18, result.c_str(), 0x900);
-				return g_hooking->get_original<prepare_metric_for_sending>()(serializer, unk, time, metric);
+				return g_hooking->get_original<prepare_metric_for_sending>()(serializer, failed, unk, time, metric);
 			}
 			return true;
 		}
@@ -131,6 +131,6 @@ namespace big
 		if (g.debug.block_all_metrics) [[unlikely]]
 			return true;
 		else
-			return g_hooking->get_original<prepare_metric_for_sending>()(serializer, unk, time, metric);
+			return g_hooking->get_original<prepare_metric_for_sending>()(serializer, failed, unk, time, metric);
 	}
 }

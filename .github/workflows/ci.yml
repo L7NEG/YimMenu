@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   ci:
-    runs-on: windows-latest
+    runs-on: windows-2022
     name: CI
     steps:
       - uses: actions/checkout@v4
@@ -28,7 +28,7 @@ jobs:
           arch: amd64
 
       - name: Generate CMake project
-        run: cmake -D CMAKE_BUILD_TYPE=RelWithDebInfo -D OPTIMIZE=YES -S. -Bbuild -G Ninja
+        run: cmake -D CMAKE_BUILD_TYPE=RelWithDebInfo -D OPTIMIZE=YES -D CMAKE_POLICY_VERSION_MINIMUM=3.5 -S. -Bbuild -G Ninja
 
       - name: Build 64bit release DLL
         run: cmake --build ./build --config RelWithDebInfo --target YimMenu --

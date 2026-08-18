@@ -9,10 +9,26 @@ namespace
 
 namespace big
 {
-	call_hook_memory::call_hook_memory()
-	{ 
-		m_memory = VirtualAlloc((void*)((uintptr_t)GetModuleHandle(0) + 0x20000000), 1024, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-		m_offset = 0;
+	call_hook_memory::call_hook_memory() :
+	    m_memory(nullptr),
+	    m_offset(0)
+	{
+		uint8_t* base  = static_cast<uint8_t*>(static_cast<void*>(GetModuleHandle(0)));
+		uint8_t* limit = base + INT32_MAX - 1024;
+
+		for (uint8_t* addr = base; addr < limit; addr += 0x10000)
+		{
+			if (m_memory = VirtualAlloc(addr, 1024, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE))
+			{
+				LOGF(VERBOSE, "Allocated call hook memory at {}. Base: {}.", m_memory.as<void*>(), static_cast<void*>(base));
+				break;
+			}
+		}
+
+		if (!m_memory)
+		{
+			LOG(FATAL) << "Failed to allocate call hook memory!";
+		}
 	}
 
 	call_hook_memory::~call_hook_memory()
