@@ -18,16 +18,19 @@ namespace big
 			return formatted;
 		}
 
-		// Free shopping implemented the way L7NEG's YimMenu fork does it:
-		//  1. Spoof balance/can-spend checks so the shop script always lets the purchase through.
-		//  2. Zero the item's Value field inside NET_GAMESERVER_BASKET_ADD_ITEM so the basket
-		//     (and thus the transaction the server records) is free.
-		//  3. Zero the amount on the money-deduction natives so nothing is charged.
-		//  4. Force a cloud save right after a successful purchase so the ownership stats
-		//     (property, garage, etc.) sync to Rockstar's backend.
+		// Free shopping implemented the way Cherax and L7NEG's YimMenu fork do it:
+		//  - Free Shopping (g.self.free_shopping): covers store purchases
+		//    (basket flow + NETWORK_BUY_*/NETWORK_DEDUCT_CASH).
+		//  - Free Renovate (g.self.free_renovate): covers property upgrades/renovations
+		//    (the NETWORK_SPENT_*/NETWORK_SPEND_* family).
 		//
-		// The basket value is zeroed, not the item's catalog identity, so the purchase
-		// itself is structurally valid; the money deduction is cancelled client-side.
+		//  1. NET_GAMESERVER_USE_SERVER_TRANSACTIONS returns FALSE so the $0 transaction
+		//     isn't rejected by server-side validation; ownership syncs via STAT_SAVE.
+		//  2. NET_GAMESERVER_BEGIN_SERVICE zeroes the charge value.
+		//  3. Balance/can-spend stats are spoofed so the script always lets the purchase through.
+		//  4. The money-deduction natives are zeroed so nothing is charged.
+		//  5. A cloud save is forced after a successful purchase so the ownership stats
+		//     (property, garage, etc.) sync to Rockstar's backend.
 
 		static constexpr std::array<Hash, 6> sc_balance_stats = {
 			"MP0_CHAR_BANK_BALANCE_0"_J,
@@ -47,7 +50,7 @@ namespace big
 			BOOL result = STATS::STAT_GET_INT(stat_hash, out, p2);
 
 			// Spoof balance stats to INT32_MAX so the script always thinks you can afford anything.
-			if (g.self.free_shopping && out)
+			if ((g.self.free_shopping || g.self.free_renovate) && out)
 			{
 				for (const auto& h : sc_balance_stats)
 				{
@@ -121,11 +124,23 @@ namespace big
 			auto value = src->get_arg<int>(4);
 			auto flags = src->get_arg<int>(5);
 
+			// value is the amount the server charges; zeroing it makes the transaction free
+			// without submitting a $0 basket (which some items reject).
+			if (g.self.free_shopping || g.self.free_renovate)
+				value = 0;
+
 			src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BEGIN_SERVICE(transactionId, categoryHash, itemHash, actionTypeHash, value, flags));
 		}
 
 		void NET_GAMESERVER_USE_SERVER_TRANSACTIONS(rage::scrNativeCallContext *src)
 		{
+			// Disable server-side transaction validation so the $0 transaction isn't rejected;
+			// ownership then syncs through the forced STAT_SAVE instead.
+			if (g.self.free_shopping || g.self.free_renovate)
+			{
+				src->set_return_value<BOOL>(FALSE);
+				return;
+			}
 			src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_USE_SERVER_TRANSACTIONS());
 		}
 
@@ -223,13 +238,6 @@ namespace big
 			auto itemData = src->get_arg<int*>(0);
 			auto quantity = src->get_arg<int>(1);
 
-			// item is a 4 element SCR struct: PrimaryHash @ 0x0, SecondaryHash @ 0x8,
-			// Value (price) @ 0x10, StatValue @ 0x18
-			if (g.self.free_shopping && itemData)
-			{
-				*reinterpret_cast<std::uint64_t*>(reinterpret_cast<std::uint8_t*>(itemData) + 0x10) = 0;
-			}
-
 			src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM((Any*)itemData, quantity));
 		}
 
@@ -285,18 +293,17 @@ namespace big
 			auto p4 = src->get_arg<BOOL>(4);
 			auto p5 = src->get_arg<BOOL>(5);
 
-			if (g.self.free_shopping)
+			if (g.self.free_shopping || g.self.free_renovate)
 				amount = 0;
 
 			MONEY::NETWORK_DEDUCT_CASH(amount, p1, p2, p3, p4, p5);
-
-			if (g.self.free_shopping)
-				STATS::STAT_SAVE(0, 0, 3, 0);
 		}
 
 		void NETWORK_BUY_HEALTHCARE(rage::scrNativeCallContext* src)
 		{
 			auto cost = src->get_arg<int>(0);
+			if (g.self.free_shopping)
+				cost = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 
@@ -306,6 +313,8 @@ namespace big
 		void NETWORK_BUY_AIRSTRIKE(rage::scrNativeCallContext* src)
 		{
 			auto cost = src->get_arg<int>(0);
+			if (g.self.free_shopping)
+				cost = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -316,6 +325,8 @@ namespace big
 		void NETWORK_BUY_HELI_STRIKE(rage::scrNativeCallContext* src)
 		{
 			auto cost = src->get_arg<int>(0);
+			if (g.self.free_shopping)
+				cost = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -326,6 +337,8 @@ namespace big
 		void NETWORK_BUY_BOUNTY(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_shopping)
+				amount = 0;
 			auto victim = src->get_arg<Player>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<BOOL>(3);
@@ -337,6 +350,8 @@ namespace big
 		void NETWORK_BUY_FAIRGROUND_RIDE(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_shopping)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<BOOL>(3);
@@ -348,6 +363,8 @@ namespace big
 		void NETWORK_SPENT_MOVE_YACHT(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 
@@ -357,6 +374,8 @@ namespace big
 		void NETWORK_SPENT_HANGAR_UTILITY_CHARGES(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 
@@ -366,6 +385,8 @@ namespace big
 		void NETWORK_SPENT_HANGAR_STAFF_CHARGES(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 
@@ -415,6 +436,8 @@ namespace big
 		void NETWORK_CASINO_BUY_CHIPS(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_shopping)
+				amount = 0;
 			auto p1 = src->get_arg<int>(1);
 
 			MONEY::NETWORK_CASINO_BUY_CHIPS(amount, p1);
@@ -423,6 +446,8 @@ namespace big
 		void NETWORK_SPENT_UPGRADE_OFFICE_PROPERTY(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -434,6 +459,8 @@ namespace big
 		void NETWORK_SPENT_PURCHASE_OFFICE_PROPERTY(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -445,6 +472,8 @@ namespace big
 		void NETWORK_SPENT_UPGRADE_WAREHOUSE_PROPERTY(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -455,6 +484,8 @@ namespace big
 		void NETWORK_SPENT_PURCHASE_WAREHOUSE_PROPERTY(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -465,6 +496,8 @@ namespace big
 		void NETWORK_SPENT_UPGRADE_IMPEXP_WAREHOUSE_PROPERTY(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -475,6 +508,8 @@ namespace big
 		void NETWORK_SPENT_PURCHASE_IMPEXP_WAREHOUSE_PROPERTY(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any*>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<BOOL>(3);
@@ -485,6 +520,8 @@ namespace big
 		void NETWORK_SPENT_PURCHASE_CLUB_HOUSE(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -495,6 +532,8 @@ namespace big
 		void NETWORK_SPENT_UPGRADE_CLUB_HOUSE(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -505,6 +544,8 @@ namespace big
 		void NETWORK_SPENT_PURCHASE_BUSINESS_PROPERTY(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -515,6 +556,8 @@ namespace big
 		void NETWORK_SPENT_UPGRADE_BUSINESS_PROPERTY(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -529,13 +572,10 @@ namespace big
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
 
-			if (g.self.free_shopping)
+			if (g.self.free_renovate)
 				amount = 0;
 
 			MONEY::NETWORK_SPENT_UPGRADE_OFFICE_GARAGE(amount, p1, p2, p3);
-
-			if (g.self.free_shopping)
-				STATS::STAT_SAVE(0, 0, 3, 0);
 		}
 
 		void NETWORK_SPENT_PURCHASE_OFFICE_GARAGE(rage::scrNativeCallContext* src)
@@ -545,18 +585,17 @@ namespace big
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
 
-			if (g.self.free_shopping)
+			if (g.self.free_renovate)
 				amount = 0;
 
 			MONEY::NETWORK_SPENT_PURCHASE_OFFICE_GARAGE(amount, p1, p2, p3);
-
-			if (g.self.free_shopping)
-				STATS::STAT_SAVE(0, 0, 3, 0);
 		}
 
 		void NETWORK_SPENT_UPGRADE_HANGAR(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -567,6 +606,8 @@ namespace big
 		void NETWORK_SPENT_PURCHASE_HANGAR(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -577,6 +618,8 @@ namespace big
 		void NETWORK_SPENT_UPGRADE_TRUCK(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -587,6 +630,8 @@ namespace big
 		void NETWORK_SPENT_BUY_TRUCK(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -597,6 +642,8 @@ namespace big
 		void NETWORK_SPENT_UPRADE_BUNKER(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -607,6 +654,8 @@ namespace big
 		void NETWORK_SPENT_BUY_BUNKER(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -617,6 +666,8 @@ namespace big
 		void NETWORK_SPENT_UPGRADE_BASE(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -627,6 +678,8 @@ namespace big
 		void NETWORK_SPENT_BUY_BASE(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -637,6 +690,8 @@ namespace big
 		void NETWORK_SPENT_BUY_TILTROTOR(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -647,6 +702,8 @@ namespace big
 		void NETWORK_SPENT_UPGRADE_TILTROTOR(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -657,6 +714,8 @@ namespace big
 		void NETWORK_SPENT_UPGRADE_HACKER_TRUCK(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -667,6 +726,8 @@ namespace big
 		void NETWORK_SPENT_PURCHASE_HACKER_TRUCK(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -677,6 +738,8 @@ namespace big
 		void NETWORK_SPENT_UPGRADE_NIGHTCLUB_AND_WAREHOUSE(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -687,6 +750,8 @@ namespace big
 		void NETWORK_SPENT_PURCHASE_NIGHTCLUB_AND_WAREHOUSE(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -697,6 +762,8 @@ namespace big
 		void NETWORK_SPEND_UPGRADE_ARENA(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<const char*>(3);
@@ -707,6 +774,8 @@ namespace big
 		void NETWORK_SPEND_BUY_ARENA(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<const char*>(3);
@@ -717,6 +786,8 @@ namespace big
 		void NETWORK_SPEND_UPGRADE_CASINO(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<Any*>(3);
@@ -727,6 +798,8 @@ namespace big
 		void NETWORK_SPEND_BUY_CASINO(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<Any*>(3);
@@ -737,6 +810,8 @@ namespace big
 		void NETWORK_SPEND_UPGRADE_ARCADE(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -747,6 +822,8 @@ namespace big
 		void NETWORK_SPEND_BUY_ARCADE(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -757,6 +834,8 @@ namespace big
 		void NETWORK_SPEND_UPGRADE_SUB(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -767,6 +846,8 @@ namespace big
 		void NETWORK_SPEND_BUY_SUB(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -777,6 +858,8 @@ namespace big
 		void NETWORK_SPEND_UPGRADE_AUTOSHOP(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -787,6 +870,8 @@ namespace big
 		void NETWORK_SPEND_BUY_AUTOSHOP(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -797,6 +882,8 @@ namespace big
 		void NETWORK_SPEND_UPGRADE_AGENCY(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -807,6 +894,8 @@ namespace big
 		void NETWORK_SPEND_BUY_AGENCY(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -817,6 +906,8 @@ namespace big
 		void _NETWORK_SPEND_BUY_MFGARAGE(rage::scrNativeCallContext* src)
 		{
 			auto p0 = src->get_arg<Any>(0);
+			if (g.self.free_renovate)
+				p0 = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -827,6 +918,8 @@ namespace big
 		void _NETWORK_SPEND_UPGRADE_MFGARAGE(rage::scrNativeCallContext* src)
 		{
 			auto p0 = src->get_arg<Any>(0);
+			if (g.self.free_renovate)
+				p0 = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -837,6 +930,8 @@ namespace big
 		void _NETWORK_SPEND_BUY_ACID_LAB(rage::scrNativeCallContext* src)
 		{
 			auto p0 = src->get_arg<Any>(0);
+			if (g.self.free_renovate)
+				p0 = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -847,6 +942,8 @@ namespace big
 		void _NETWORK_SPEND_BUY_SUPPLIES(rage::scrNativeCallContext* src)
 		{
 			auto p0 = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				p0 = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<int>(3);
@@ -857,6 +954,8 @@ namespace big
 		void _NETWORK_SPEND_UPGRADE_ACID_LAB_EQUIPMENT(rage::scrNativeCallContext* src)
 		{
 			auto p0 = src->get_arg<Any>(0);
+			if (g.self.free_renovate)
+				p0 = 0;
 			auto p1 = src->get_arg<Any>(1);
 			auto p2 = src->get_arg<Any>(2);
 			auto p3 = src->get_arg<Any>(3);
@@ -867,6 +966,8 @@ namespace big
 		void _NETWORK_SPEND_UPGRADE_ACID_LAB_ARMOR(rage::scrNativeCallContext* src)
 		{
 			auto p0 = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				p0 = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<int>(3);
@@ -877,6 +978,8 @@ namespace big
 		void _NETWORK_SPEND_UPGRADE_ACID_LAB_SCOOP(rage::scrNativeCallContext* src)
 		{
 			auto p0 = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				p0 = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<int>(3);
@@ -887,6 +990,8 @@ namespace big
 		void _NETWORK_SPEND_UPGRADE_ACID_LAB_MINES(rage::scrNativeCallContext* src)
 		{
 			auto p0 = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				p0 = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<int>(3);
@@ -897,6 +1002,8 @@ namespace big
 		void _NETWORK_SPENT_AIR_FREIGHT(rage::scrNativeCallContext* src)
 		{
 			auto p0 = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				p0 = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<int>(3);
@@ -909,6 +1016,8 @@ namespace big
 		void _NETWORK_SPENT_STEALTH_MODULE(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<Hash>(3);
@@ -919,6 +1028,8 @@ namespace big
 		void _NETWORK_SPENT_MISSILE_JAMMER(rage::scrNativeCallContext* src)
 		{
 			auto amount = src->get_arg<int>(0);
+			if (g.self.free_renovate)
+				amount = 0;
 			auto p1 = src->get_arg<BOOL>(1);
 			auto p2 = src->get_arg<BOOL>(2);
 			auto p3 = src->get_arg<Hash>(3);
@@ -937,18 +1048,15 @@ namespace big
 			auto p6 = src->get_arg<const char*>(6);
 			auto data = src->get_arg<Any*>(7);
 
-			if (g.self.free_shopping)
+			if (g.self.free_renovate)
 				price = 0;
 
 			MONEY::_NETWORK_SPENT_GENERIC(price, p1, p2, stat, spent, p5, p6, data);
-
-			if (g.self.free_shopping)
-				STATS::STAT_SAVE(0, 0, 3, 0);
 		}
 
 		void NETWORK_CAN_SPEND_MONEY(rage::scrNativeCallContext* src)
 		{
-			if (g.self.free_shopping)
+			if (g.self.free_shopping || g.self.free_renovate)
 			{
 				src->set_return_value<BOOL>(TRUE);
 				return;
@@ -964,7 +1072,7 @@ namespace big
 
 		void NETWORK_CAN_SPEND_MONEY2(rage::scrNativeCallContext* src)
 		{
-			if (g.self.free_shopping)
+			if (g.self.free_shopping || g.self.free_renovate)
 			{
 				src->set_return_value<BOOL>(TRUE);
 				return;
@@ -981,7 +1089,7 @@ namespace big
 
 		void NETWORK_GET_CAN_SPEND_FROM_WALLET(rage::scrNativeCallContext* src)
 		{
-			if (g.self.free_shopping)
+			if (g.self.free_shopping || g.self.free_renovate)
 			{
 				src->set_return_value<BOOL>(TRUE);
 				return;
@@ -991,7 +1099,7 @@ namespace big
 
 		void NETWORK_GET_CAN_SPEND_FROM_BANK(rage::scrNativeCallContext* src)
 		{
-			if (g.self.free_shopping)
+			if (g.self.free_shopping || g.self.free_renovate)
 			{
 				src->set_return_value<BOOL>(TRUE);
 				return;
@@ -1001,7 +1109,7 @@ namespace big
 
 		void NETWORK_GET_CAN_SPEND_FROM_BANK_AND_WALLET(rage::scrNativeCallContext* src)
 		{
-			if (g.self.free_shopping)
+			if (g.self.free_shopping || g.self.free_renovate)
 			{
 				src->set_return_value<BOOL>(TRUE);
 				return;

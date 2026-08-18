@@ -34,7 +34,12 @@ namespace big
 			ImGui::Checkbox("Free Shopping", &g.self.free_shopping);
 			if (ImGui::IsItemHovered())
 			{
-				ImGui::SetTooltip("Buy anything in the in-game store for free. The basket value and money deduction are zeroed so nothing is charged, and a cloud save is forced after each purchase so the ownership stats sync.\nBan risk: use on a burner account.");
+				ImGui::SetTooltip("Buy items in the in-game store for free. The transaction value and money deduction are zeroed so nothing is charged, and a cloud save is forced after each purchase so the ownership stats sync.\nBan risk: use on a burner account.");
+			}
+			ImGui::Checkbox("Free Renovate", &g.self.free_renovate);
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Renovate and upgrade properties for free (office garages, decor, nightclub/bunker upgrades, etc.). The transaction value and money deduction are zeroed.\nBan risk: use on a burner account.");
 			}
 		}
 		if (ImGui::Button("Force Cloud Save"))
