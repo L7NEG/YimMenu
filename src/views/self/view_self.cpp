@@ -30,28 +30,10 @@ namespace big
 		ImGui::BeginGroup();
 
 		components::command_checkbox<"godmode">();
+		components::command_checkbox<"freeshopping">("Free Shopping");
+		if (ImGui::IsItemHovered())
 		{
-			static bool free_shopping_was_enabled = false;
-			if (ImGui::Checkbox("Free Shopping", &g.self.free_shopping))
-			{
-				if (g.self.free_shopping && !free_shopping_was_enabled)
-				{
-					g_fiber_pool->queue_job([] {
-						const auto wallet = MONEY::NETWORK_GET_VC_WALLET_BALANCE(self::char_index);
-						constexpr int floor = 500'000'000;
-						if (wallet < floor)
-						{
-							MONEY::NETWORK_REFUND_CASH(floor - wallet, "FREE_SHOPPING", "Free Shopping Refund", true);
-							g_notification_service.push_success("Free Shopping", "Wallet topped up so full-price purchases can go through.");
-						}
-					});
-				}
-				free_shopping_was_enabled = g.self.free_shopping;
-			}
-			if (ImGui::IsItemHovered())
-			{
-				ImGui::SetTooltip("Makes everything free (store purchases + property upgrades). Real transaction fires so ownership persists, money refunded automatically.\nWallet topped up on enable.\nBan risk: use on a burner account.");
-			}
+			ImGui::SetTooltip("Zeroes price tunables for upgrades/cars/weapons so the game computes a $0 price. Properties are not affected (they are priced via the server catalog).\nReal transaction fires so ownership persists.\nBan risk: use on a burner account.");
 		}
 		if (ImGui::Button("Force Cloud Save"))
 		{

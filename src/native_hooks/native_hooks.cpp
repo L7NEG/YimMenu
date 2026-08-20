@@ -6,7 +6,6 @@
 #include "creator.hpp"
 #include "freemode.hpp"
 #include "network_session_host.hpp"
-#include "shop_controller.hpp"
 #include "tunables.hpp"
 
 #include <script/scrProgram.hpp>
@@ -101,110 +100,6 @@ namespace big
 		add_native_detour(NativeIndex::_GET_BATTLEYE_INIT_STATE, all_scripts::RETURN_FALSE); 
 
 		add_native_detour("shop_controller"_J, NativeIndex::IS_PED_SHOOTING, all_scripts::RETURN_FALSE); // prevent exploit reports
-		add_native_detour("shop_controller"_J, NativeIndex::SET_WARNING_MESSAGE_WITH_HEADER, shop_controller::SET_WARNING_MESSAGE_WITH_HEADER);
-		add_native_detour("shop_controller"_J, NativeIndex::SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT, shop_controller::SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT);
-		add_native_detour("shop_controller"_J, NativeIndex::STAT_GET_INT, shop_controller::STAT_GET_INT);
-		add_native_detour("am_mp_property_int"_J, NativeIndex::STAT_GET_INT, shop_controller::STAT_GET_INT);
-		add_native_detour("am_mp_property_int"_J, NativeIndex::NET_GAMESERVER_BASKET_ADD_ITEM, shop_controller::NET_GAMESERVER_BASKET_ADD_ITEM);
-		add_native_detour(NativeIndex::NET_GAMESERVER_GET_PRICE, shop_controller::NET_GAMESERVER_GET_PRICE);
-		add_native_detour(NativeIndex::NET_GAMESERVER_CATALOG_ITEM_IS_VALID, shop_controller::NET_GAMESERVER_CATALOG_ITEM_IS_VALID);
-		add_native_detour(NativeIndex::NET_GAMESERVER_CATALOG_ITEM_KEY_IS_VALID, shop_controller::NET_GAMESERVER_CATALOG_ITEM_KEY_IS_VALID);
-		add_native_detour(NativeIndex::NET_GAMESERVER_CATALOG_IS_VALID, shop_controller::NET_GAMESERVER_CATALOG_IS_VALID);
-		add_native_detour(NativeIndex::NET_GAMESERVER_BEGIN_SERVICE, shop_controller::NET_GAMESERVER_BEGIN_SERVICE);
-		add_native_detour(NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, shop_controller::NET_GAMESERVER_USE_SERVER_TRANSACTIONS);
-		add_native_detour(NativeIndex::NET_GAMESERVER_GET_CATALOG_CLOUD_CRC, shop_controller::NET_GAMESERVER_GET_CATALOG_CLOUD_CRC);
-		add_native_detour(NativeIndex::NET_GAMESERVER_RETRIEVE_INIT_SESSION_STATUS, shop_controller::NET_GAMESERVER_RETRIEVE_INIT_SESSION_STATUS);
-		add_native_detour(NativeIndex::NET_GAMESERVER_START_SESSION, shop_controller::NET_GAMESERVER_START_SESSION);
-		add_native_detour(NativeIndex::NET_GAMESERVER_START_SESSION_PENDING, shop_controller::NET_GAMESERVER_START_SESSION_PENDING);
-		add_native_detour(NativeIndex::NET_GAMESERVER_RETRIEVE_START_SESSION_STATUS, shop_controller::NET_GAMESERVER_RETRIEVE_START_SESSION_STATUS);
-		add_native_detour(NativeIndex::NET_GAMESERVER_IS_SESSION_REFRESH_PENDING, shop_controller::NET_GAMESERVER_IS_SESSION_REFRESH_PENDING);
-		add_native_detour(NativeIndex::NET_GAMESERVER_TRANSACTION_IN_PROGRESS, shop_controller::NET_GAMESERVER_TRANSACTION_IN_PROGRESS);
-		add_native_detour(NativeIndex::NET_GAMESERVER_GET_SESSION_STATE_AND_STATUS, shop_controller::NET_GAMESERVER_GET_SESSION_STATE_AND_STATUS);
-		add_native_detour(NativeIndex::NET_GAMESERVER_IS_SESSION_VALID, shop_controller::NET_GAMESERVER_IS_SESSION_VALID);
-		add_native_detour(NativeIndex::NET_GAMESERVER_RETRIEVE_SESSION_ERROR_CODE, shop_controller::NET_GAMESERVER_RETRIEVE_SESSION_ERROR_CODE);
-		add_native_detour(NativeIndex::NET_GAMESERVER_IS_CATALOG_CURRENT, shop_controller::NET_GAMESERVER_IS_CATALOG_CURRENT);
-		add_native_detour(NativeIndex::NET_GAMESERVER_RETRIEVE_CATALOG_REFRESH_STATUS, shop_controller::NET_GAMESERVER_RETRIEVE_CATALOG_REFRESH_STATUS);
-		add_native_detour(NativeIndex::NET_GAMESERVER_CHECKOUT_START, shop_controller::NET_GAMESERVER_CHECKOUT_START);
-		add_native_detour(NativeIndex::NET_GAMESERVER_BASKET_START, shop_controller::NET_GAMESERVER_BASKET_START);
-		add_native_detour(NativeIndex::NET_GAMESERVER_BASKET_ADD_ITEM, shop_controller::NET_GAMESERVER_BASKET_ADD_ITEM);
-		add_native_detour(NativeIndex::NET_GAMESERVER_BASKET_END, shop_controller::NET_GAMESERVER_BASKET_END);
-		add_native_detour(NativeIndex::NET_GAMESERVER_END_SERVICE, shop_controller::NET_GAMESERVER_END_SERVICE);
-		add_native_detour(NativeIndex::NETWORK_BUY_ITEM, shop_controller::NETWORK_BUY_ITEM);
-		add_native_detour(NativeIndex::NETWORK_BUY_PROPERTY, shop_controller::NETWORK_BUY_PROPERTY);
-		add_native_detour(NativeIndex::NETWORK_DEDUCT_CASH, shop_controller::NETWORK_DEDUCT_CASH);
-		add_native_detour(NativeIndex::NETWORK_BUY_HEALTHCARE, shop_controller::NETWORK_BUY_HEALTHCARE);
-		add_native_detour(NativeIndex::NETWORK_BUY_AIRSTRIKE, shop_controller::NETWORK_BUY_AIRSTRIKE);
-		add_native_detour(NativeIndex::NETWORK_BUY_HELI_STRIKE, shop_controller::NETWORK_BUY_HELI_STRIKE);
-		add_native_detour(NativeIndex::NETWORK_BUY_BOUNTY, shop_controller::NETWORK_BUY_BOUNTY);
-		add_native_detour(NativeIndex::NETWORK_BUY_FAIRGROUND_RIDE, shop_controller::NETWORK_BUY_FAIRGROUND_RIDE);
-		add_native_detour(NativeIndex::NETWORK_CAN_SPEND_MONEY, shop_controller::NETWORK_CAN_SPEND_MONEY);
-		add_native_detour(NativeIndex::NETWORK_CAN_SPEND_MONEY2, shop_controller::NETWORK_CAN_SPEND_MONEY2);
-		add_native_detour(NativeIndex::NETWORK_SPENT_MOVE_YACHT, shop_controller::NETWORK_SPENT_MOVE_YACHT);
-		add_native_detour(NativeIndex::NETWORK_SPENT_HANGAR_UTILITY_CHARGES, shop_controller::NETWORK_SPENT_HANGAR_UTILITY_CHARGES);
-		add_native_detour(NativeIndex::NETWORK_SPENT_HANGAR_STAFF_CHARGES, shop_controller::NETWORK_SPENT_HANGAR_STAFF_CHARGES);
-		add_native_detour(NativeIndex::NETWORK_GET_VC_BANK_BALANCE, shop_controller::NETWORK_GET_VC_BANK_BALANCE);
-		add_native_detour(NativeIndex::NETWORK_GET_VC_BALANCE, shop_controller::NETWORK_GET_VC_BALANCE);
-		add_native_detour(NativeIndex::NETWORK_GET_VC_WALLET_BALANCE, shop_controller::NETWORK_GET_VC_WALLET_BALANCE);
-		add_native_detour(NativeIndex::NETWORK_GET_CAN_SPEND_FROM_WALLET, shop_controller::NETWORK_GET_CAN_SPEND_FROM_WALLET);
-		add_native_detour(NativeIndex::NETWORK_GET_CAN_SPEND_FROM_BANK, shop_controller::NETWORK_GET_CAN_SPEND_FROM_BANK);
-		add_native_detour(NativeIndex::NETWORK_GET_CAN_SPEND_FROM_BANK_AND_WALLET, shop_controller::NETWORK_GET_CAN_SPEND_FROM_BANK_AND_WALLET);
-		add_native_detour(NativeIndex::NETWORK_GET_EVC_BALANCE, shop_controller::NETWORK_GET_EVC_BALANCE);
-		add_native_detour(NativeIndex::NETWORK_GET_PVC_BALANCE, shop_controller::NETWORK_GET_PVC_BALANCE);
-		add_native_detour(NativeIndex::NETWORK_GET_STRING_WALLET_BALANCE, shop_controller::NETWORK_GET_STRING_WALLET_BALANCE);
-		add_native_detour(NativeIndex::NETWORK_GET_STRING_BANK_BALANCE, shop_controller::NETWORK_GET_STRING_BANK_BALANCE);
-		add_native_detour(NativeIndex::NETWORK_GET_STRING_BANK_WALLET_BALANCE, shop_controller::NETWORK_GET_STRING_BANK_WALLET_BALANCE);
-		add_native_detour(NativeIndex::NETWORK_CASINO_BUY_CHIPS, shop_controller::NETWORK_CASINO_BUY_CHIPS);
-		add_native_detour(NativeIndex::NETWORK_SPENT_UPGRADE_OFFICE_PROPERTY, shop_controller::NETWORK_SPENT_UPGRADE_OFFICE_PROPERTY);
-		add_native_detour(NativeIndex::NETWORK_SPENT_PURCHASE_OFFICE_PROPERTY, shop_controller::NETWORK_SPENT_PURCHASE_OFFICE_PROPERTY);
-		add_native_detour(NativeIndex::NETWORK_SPENT_UPGRADE_WAREHOUSE_PROPERTY, shop_controller::NETWORK_SPENT_UPGRADE_WAREHOUSE_PROPERTY);
-		add_native_detour(NativeIndex::NETWORK_SPENT_PURCHASE_WAREHOUSE_PROPERTY, shop_controller::NETWORK_SPENT_PURCHASE_WAREHOUSE_PROPERTY);
-		add_native_detour(NativeIndex::NETWORK_SPENT_UPGRADE_IMPEXP_WAREHOUSE_PROPERTY, shop_controller::NETWORK_SPENT_UPGRADE_IMPEXP_WAREHOUSE_PROPERTY);
-		add_native_detour(NativeIndex::NETWORK_SPENT_PURCHASE_IMPEXP_WAREHOUSE_PROPERTY, shop_controller::NETWORK_SPENT_PURCHASE_IMPEXP_WAREHOUSE_PROPERTY);
-		add_native_detour(NativeIndex::NETWORK_SPENT_PURCHASE_CLUB_HOUSE, shop_controller::NETWORK_SPENT_PURCHASE_CLUB_HOUSE);
-		add_native_detour(NativeIndex::NETWORK_SPENT_UPGRADE_CLUB_HOUSE, shop_controller::NETWORK_SPENT_UPGRADE_CLUB_HOUSE);
-		add_native_detour(NativeIndex::NETWORK_SPENT_PURCHASE_BUSINESS_PROPERTY, shop_controller::NETWORK_SPENT_PURCHASE_BUSINESS_PROPERTY);
-		add_native_detour(NativeIndex::NETWORK_SPENT_UPGRADE_BUSINESS_PROPERTY, shop_controller::NETWORK_SPENT_UPGRADE_BUSINESS_PROPERTY);
-		add_native_detour(NativeIndex::NETWORK_SPENT_UPGRADE_OFFICE_GARAGE, shop_controller::NETWORK_SPENT_UPGRADE_OFFICE_GARAGE);
-		add_native_detour(NativeIndex::NETWORK_SPENT_PURCHASE_OFFICE_GARAGE, shop_controller::NETWORK_SPENT_PURCHASE_OFFICE_GARAGE);
-		add_native_detour(NativeIndex::NETWORK_SPENT_UPGRADE_HANGAR, shop_controller::NETWORK_SPENT_UPGRADE_HANGAR);
-		add_native_detour(NativeIndex::NETWORK_SPENT_PURCHASE_HANGAR, shop_controller::NETWORK_SPENT_PURCHASE_HANGAR);
-		add_native_detour(NativeIndex::NETWORK_SPENT_UPGRADE_TRUCK, shop_controller::NETWORK_SPENT_UPGRADE_TRUCK);
-		add_native_detour(NativeIndex::NETWORK_SPENT_BUY_TRUCK, shop_controller::NETWORK_SPENT_BUY_TRUCK);
-		add_native_detour(NativeIndex::NETWORK_SPENT_UPRADE_BUNKER, shop_controller::NETWORK_SPENT_UPRADE_BUNKER);
-		add_native_detour(NativeIndex::NETWORK_SPENT_BUY_BUNKER, shop_controller::NETWORK_SPENT_BUY_BUNKER);
-		add_native_detour(NativeIndex::NETWORK_SPENT_UPGRADE_BASE, shop_controller::NETWORK_SPENT_UPGRADE_BASE);
-		add_native_detour(NativeIndex::NETWORK_SPENT_BUY_BASE, shop_controller::NETWORK_SPENT_BUY_BASE);
-		add_native_detour(NativeIndex::NETWORK_SPENT_BUY_TILTROTOR, shop_controller::NETWORK_SPENT_BUY_TILTROTOR);
-		add_native_detour(NativeIndex::NETWORK_SPENT_UPGRADE_TILTROTOR, shop_controller::NETWORK_SPENT_UPGRADE_TILTROTOR);
-		add_native_detour(NativeIndex::NETWORK_SPENT_UPGRADE_HACKER_TRUCK, shop_controller::NETWORK_SPENT_UPGRADE_HACKER_TRUCK);
-		add_native_detour(NativeIndex::NETWORK_SPENT_PURCHASE_HACKER_TRUCK, shop_controller::NETWORK_SPENT_PURCHASE_HACKER_TRUCK);
-		add_native_detour(NativeIndex::NETWORK_SPENT_UPGRADE_NIGHTCLUB_AND_WAREHOUSE, shop_controller::NETWORK_SPENT_UPGRADE_NIGHTCLUB_AND_WAREHOUSE);
-		add_native_detour(NativeIndex::NETWORK_SPENT_PURCHASE_NIGHTCLUB_AND_WAREHOUSE, shop_controller::NETWORK_SPENT_PURCHASE_NIGHTCLUB_AND_WAREHOUSE);
-		add_native_detour(NativeIndex::NETWORK_SPEND_UPGRADE_ARENA, shop_controller::NETWORK_SPEND_UPGRADE_ARENA);
-		add_native_detour(NativeIndex::NETWORK_SPEND_BUY_ARENA, shop_controller::NETWORK_SPEND_BUY_ARENA);
-		add_native_detour(NativeIndex::NETWORK_SPEND_UPGRADE_CASINO, shop_controller::NETWORK_SPEND_UPGRADE_CASINO);
-		add_native_detour(NativeIndex::NETWORK_SPEND_BUY_CASINO, shop_controller::NETWORK_SPEND_BUY_CASINO);
-		add_native_detour(NativeIndex::NETWORK_SPEND_UPGRADE_ARCADE, shop_controller::NETWORK_SPEND_UPGRADE_ARCADE);
-		add_native_detour(NativeIndex::NETWORK_SPEND_BUY_ARCADE, shop_controller::NETWORK_SPEND_BUY_ARCADE);
-		add_native_detour(NativeIndex::NETWORK_SPEND_UPGRADE_SUB, shop_controller::NETWORK_SPEND_UPGRADE_SUB);
-		add_native_detour(NativeIndex::NETWORK_SPEND_BUY_SUB, shop_controller::NETWORK_SPEND_BUY_SUB);
-		add_native_detour(NativeIndex::NETWORK_SPEND_UPGRADE_AUTOSHOP, shop_controller::NETWORK_SPEND_UPGRADE_AUTOSHOP);
-		add_native_detour(NativeIndex::NETWORK_SPEND_BUY_AUTOSHOP, shop_controller::NETWORK_SPEND_BUY_AUTOSHOP);
-		add_native_detour(NativeIndex::NETWORK_SPEND_UPGRADE_AGENCY, shop_controller::NETWORK_SPEND_UPGRADE_AGENCY);
-		add_native_detour(NativeIndex::NETWORK_SPEND_BUY_AGENCY, shop_controller::NETWORK_SPEND_BUY_AGENCY);
-		add_native_detour(NativeIndex::_NETWORK_SPEND_BUY_MFGARAGE, shop_controller::_NETWORK_SPEND_BUY_MFGARAGE);
-		add_native_detour(NativeIndex::_NETWORK_SPEND_UPGRADE_MFGARAGE, shop_controller::_NETWORK_SPEND_UPGRADE_MFGARAGE);
-		add_native_detour(NativeIndex::_NETWORK_SPEND_BUY_ACID_LAB, shop_controller::_NETWORK_SPEND_BUY_ACID_LAB);
-		add_native_detour(NativeIndex::_NETWORK_SPEND_BUY_SUPPLIES, shop_controller::_NETWORK_SPEND_BUY_SUPPLIES);
-		add_native_detour(NativeIndex::_NETWORK_SPEND_UPGRADE_ACID_LAB_EQUIPMENT, shop_controller::_NETWORK_SPEND_UPGRADE_ACID_LAB_EQUIPMENT);
-		add_native_detour(NativeIndex::_NETWORK_SPEND_UPGRADE_ACID_LAB_ARMOR, shop_controller::_NETWORK_SPEND_UPGRADE_ACID_LAB_ARMOR);
-		add_native_detour(NativeIndex::_NETWORK_SPEND_UPGRADE_ACID_LAB_SCOOP, shop_controller::_NETWORK_SPEND_UPGRADE_ACID_LAB_SCOOP);
-		add_native_detour(NativeIndex::_NETWORK_SPEND_UPGRADE_ACID_LAB_MINES, shop_controller::_NETWORK_SPEND_UPGRADE_ACID_LAB_MINES);
-		add_native_detour(NativeIndex::_NETWORK_SPENT_AIR_FREIGHT, shop_controller::_NETWORK_SPENT_AIR_FREIGHT);
-		add_native_detour(NativeIndex::_NETWORK_SPENT_STEALTH_MODULE, shop_controller::_NETWORK_SPENT_STEALTH_MODULE);
-		add_native_detour(NativeIndex::_NETWORK_SPENT_MISSILE_JAMMER, shop_controller::_NETWORK_SPENT_MISSILE_JAMMER);
-		add_native_detour(NativeIndex::_NETWORK_SPENT_GENERIC, shop_controller::_NETWORK_SPENT_GENERIC);
-
 		add_native_detour("freemode"_J, NativeIndex::GET_NUMBER_OF_THREADS_RUNNING_THE_SCRIPT_WITH_THIS_HASH, freemode::GET_NUMBER_OF_THREADS_RUNNING_THE_SCRIPT_WITH_THIS_HASH);
 		add_native_detour("freemode"_J, NativeIndex::STAT_GET_INT, freemode::STAT_GET_INT);
 		add_native_detour("freemode"_J, NativeIndex::IS_PLAYER_PLAYING, freemode::IS_PLAYER_PLAYING);

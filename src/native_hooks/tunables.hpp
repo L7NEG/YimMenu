@@ -1,4 +1,6 @@
 #pragma once
+#include "core/data/free_shopping.hpp"
+#include "core/settings.hpp"
 #include "services/tunables/tunables_service.hpp"
 #include "natives.hpp"
 
@@ -22,7 +24,15 @@ namespace big
 				src->set_return_value<int>(g_tunables_service->m_current_junk_val++);
 				return;
 			}
-			src->set_return_value<int>(NETWORK::_NETWORK_GET_TUNABLES_REGISTRATION_INT(src->get_arg<Hash>(0), src->get_arg<int>(1)));
+
+			const auto hash = src->get_arg<Hash>(0);
+			if (g.self.free_shopping && free_shopping::is_discountable(hash))
+			{
+				src->set_return_value<int>(0);
+				return;
+			}
+
+			src->set_return_value<int>(NETWORK::_NETWORK_GET_TUNABLES_REGISTRATION_INT(hash, src->get_arg<int>(1)));
 		};
 
 		inline void _NETWORK_GET_TUNABLES_REGISTRATION_BOOL(rage::scrNativeCallContext* src)
@@ -44,7 +54,15 @@ namespace big
 				src->set_return_value<int>(g_tunables_service->m_current_junk_val++);
 				return;
 			}
-			src->set_return_value<float>(NETWORK::_NETWORK_GET_TUNABLES_REGISTRATION_FLOAT(src->get_arg<Hash>(0), src->get_arg<float>(1)));
+
+			const auto hash = src->get_arg<Hash>(0);
+			if (g.self.free_shopping && free_shopping::is_discountable(hash))
+			{
+				src->set_return_value<float>(0.0f);
+				return;
+			}
+
+			src->set_return_value<float>(NETWORK::_NETWORK_GET_TUNABLES_REGISTRATION_FLOAT(hash, src->get_arg<float>(1)));
 		};
 	}
 }
