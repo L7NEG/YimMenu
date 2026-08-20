@@ -163,6 +163,19 @@ namespace big
 			NLOHMANN_DEFINE_TYPE_INTRUSIVE(tunables, disable_phone, no_idle_kick)
 		} tunables{};
 
+		struct freeshopping
+		{
+			bool enabled     = false;
+			bool weapons     = true;
+			bool weapon_mods = true;
+			bool clothing    = true;
+			bool vehicle     = true;
+			bool services    = true;
+			bool misc        = false;
+
+			NLOHMANN_DEFINE_TYPE_INTRUSIVE(freeshopping, enabled, weapons, weapon_mods, clothing, vehicle, services, misc)
+		} freeshopping{};
+
 		struct notifications
 		{
 			struct pair
@@ -1166,7 +1179,7 @@ namespace big
 			NLOHMANN_DEFINE_TYPE_INTRUSIVE(cmd, command_history)
 		} cmd{};
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE(menu_settings, debug, tunables, notifications, player, player_db, protections, self, session, settings, spawn_vehicle, clone_pv, persist_car, spoofing, vehicle, weapons, window, context_menu, esp, session_browser, ugc, reactions, world, stat_editor, lua, persist_weapons, vfx, cmd)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE(menu_settings, debug, tunables, freeshopping, notifications, player, player_db, protections, self, session, settings, spawn_vehicle, clone_pv, persist_car, spoofing, vehicle, weapons, window, context_menu, esp, session_browser, ugc, reactions, world, stat_editor, lua, persist_weapons, vfx, cmd)
 	};
 
 	inline auto g = menu_settings();

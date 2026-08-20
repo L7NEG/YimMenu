@@ -78,6 +78,7 @@ namespace big
 		static void xml_maps();
 		static void gta_cache();
 		static void lua_scripts();
+		static void freeshopping();
 		static void vfx();
 
 		static void onboarding();
