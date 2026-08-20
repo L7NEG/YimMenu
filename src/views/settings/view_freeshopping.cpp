@@ -17,7 +17,12 @@ namespace big
 		ImGui::Checkbox("FREE_SHOPPING_CLOTHING"_T.data(), &g.freeshopping.clothing);
 		ImGui::Checkbox("FREE_SHOPPING_VEHICLE"_T.data(), &g.freeshopping.vehicle);
 		ImGui::Checkbox("FREE_SHOPPING_SERVICES"_T.data(), &g.freeshopping.services);
+		ImGui::Checkbox("FREE_SHOPPING_PROPERTIES"_T.data(), &g.freeshopping.properties);
 		ImGui::Checkbox("FREE_SHOPPING_MISC"_T.data(), &g.freeshopping.misc);
+
+		ImGui::SeparatorText("FREE_SHOPPING_UNLOCK_ITEMS"_T.data());
+		ImGui::Checkbox("FREE_SHOPPING_UNLOCK_ITEMS"_T.data(), &g.freeshopping.unlock_items);
+		ImGui::TextWrapped("FREE_SHOPPING_UNLOCK_ITEMS_DESC"_T.data());
 
 		ImGui::Separator();
 

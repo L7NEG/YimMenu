@@ -171,9 +171,11 @@ namespace big
 			bool clothing    = true;
 			bool vehicle     = true;
 			bool services    = true;
+			bool properties  = true;
 			bool misc        = false;
+			bool unlock_items = false;
 
-			NLOHMANN_DEFINE_TYPE_INTRUSIVE(freeshopping, enabled, weapons, weapon_mods, clothing, vehicle, services, misc)
+			NLOHMANN_DEFINE_TYPE_INTRUSIVE(freeshopping, enabled, weapons, weapon_mods, clothing, vehicle, services, properties, misc, unlock_items)
 		} freeshopping{};
 
 		struct notifications
