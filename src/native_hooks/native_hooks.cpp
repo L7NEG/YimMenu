@@ -5,6 +5,7 @@
 #include "am_pi_menu.hpp"
 #include "creator.hpp"
 #include "freemode.hpp"
+#include "free_shop.hpp"
 #include "network_session_host.hpp"
 #include "shop_controller.hpp"
 #include "tunables.hpp"
@@ -103,6 +104,60 @@ namespace big
 		add_native_detour("shop_controller"_J, NativeIndex::IS_PED_SHOOTING, all_scripts::RETURN_FALSE); // prevent exploit reports
 		add_native_detour("shop_controller"_J, NativeIndex::SET_WARNING_MESSAGE_WITH_HEADER, shop_controller::SET_WARNING_MESSAGE_WITH_HEADER);
 		add_native_detour("shop_controller"_J, NativeIndex::SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT, shop_controller::SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT);
+
+		// free shop: force local transactions in all shop scripts
+		add_native_detour("shop_controller"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("carmod_shop"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("personal_carmod_shop"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("arena_carmod"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("armory_aircraft_carmod"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("base_carmod"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("business_hub_carmod"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("car_meet_carmod"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("fixer_hq_carmod"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("hacker_den_carmod"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("hacker_truck_carmod"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("hangar_carmod"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("juggalo_hideout_carmod"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("tuner_property_carmod"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("vinewood_premium_garage_carmod"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("clothes_shop_mp"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("gunclub_shop"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("hairdo_shop_mp"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("tattoo_shop"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+
+		// property & business management scripts (upgrades bought from laptops/apps)
+		add_native_detour("apparcadebusiness"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("apparcadebusinesshub"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("appavengeroperations"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("appbailoffice"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("appbikerbusiness"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("appbunkerbusiness"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("appbusinesshub"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("appfixersecurity"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("apphackerden"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("apphackertruck"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("appimportexport"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("appmpbossagency"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("appsecuroserv"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("appsmuggler"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("appvlsi"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("am_mp_arcade"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("am_mp_auto_shop"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("am_mp_bail_office"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("am_mp_biker_warehouse"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("am_mp_bunker"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("am_mp_business_hub"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("am_mp_casino_nightclub"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("am_mp_fixer_hq"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("am_mp_hacker_den"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("am_mp_hangar"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("am_mp_nightclub"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("am_mp_property_ext"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("am_mp_property_int"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("am_mp_salvage_yard"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("am_mp_submarine"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
+		add_native_detour("am_mp_warehouse"_J, NativeIndex::NET_GAMESERVER_USE_SERVER_TRANSACTIONS, free_shop::USE_SERVER_TRANSACTIONS);
 
 		add_native_detour("freemode"_J, NativeIndex::GET_NUMBER_OF_THREADS_RUNNING_THE_SCRIPT_WITH_THIS_HASH, freemode::GET_NUMBER_OF_THREADS_RUNNING_THE_SCRIPT_WITH_THIS_HASH);
 		add_native_detour("freemode"_J, NativeIndex::STAT_GET_INT, freemode::STAT_GET_INT);
