@@ -48,6 +48,30 @@ endif ()
 
 add_library(YimMenu MODULE "${SRC_MAIN}")
 
+# SARAB kernel manual map compatibility - src/CMakeLists.txt:49
+# Stock nightly uses /GL + /guard:cf + /LTCG which SARAB's kernel manual map can't handle
+# (needs relocs + no GuardCF). This makes a fresh build from C:\Users\Owner\Documents\GitHub\YimMenu
+# directly usable as SARAB payload/YimMenu.dll
+option(SARAB_COMPAT "Build DLL compatible with SARAB kernel manual map" ON)
+if(SARAB_COMPAT)
+  target_compile_options(YimMenu PRIVATE /guard:cf-)
+  target_link_options(YimMenu PRIVATE /GUARD:NO /DYNAMICBASE /NXCOMPAT)
+  # /GL objects require /LTCG link - disable both for KMM
+  string(REPLACE "/GL" "" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+  string(REPLACE "/LTCG" "" CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS}")
+  string(REPLACE "/LTCG" "" CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
+  message(STATUS "SARAB compat enabled: /GUARD:NO /DYNAMICBASE /guard:cf- /GL-")
+endif()
+
+# SARAB_MINIMAL_HOOKS: fewer inline JMPs = less BE scan surface
+# keeps prepare_metric_for_sending.cpp:118 (protective) but drops QD/RE
+# enable with -DSARAB_MINIMAL_HOOKS=ON ; for BE-on you want ON, for BE-off you can leave OFF
+option(SARAB_MINIMAL_HOOKS "Fewer hooks for BE hooking detection" OFF)
+if(SARAB_MINIMAL_HOOKS)
+  target_compile_definitions(YimMenu PRIVATE SARAB_MINIMAL_HOOKS)
+  message(STATUS "SARAB minimal hooks: QD + RE disabled")
+endif()
+
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 set_property(TARGET YimMenu PROPERTY CXX_STANDARD 23) # 23 Because std::format is not avalible in std:c++20 for some reason. Maybe it's because i use v142 toolset.
 

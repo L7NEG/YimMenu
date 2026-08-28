@@ -182,7 +182,7 @@ BOOL APIENTRY DllMain(HMODULE hmod, DWORD reason, PVOID)
 				}
 				else
 				{
-				    LOGF(FATAL, "YimMenu requires FSL to be loaded. Please get it from UnknownCheats.me");
+				    LOG(INFO) << "FSL not present — running in standalone / SARAB KMM mode.";
 				}
 
 			    auto byte_patch_manager_instance = std::make_unique<byte_patch_manager>();
@@ -343,7 +343,7 @@ BOOL APIENTRY DllMain(HMODULE hmod, DWORD reason, PVOID)
 			    g_log.destroy();
 
 			    CloseHandle(g_main_thread);
-			    FreeLibraryAndExitThread(g_hmodule, 0);
+			    ExitThread(0);
 		    },
 		    nullptr,
 		    0,
