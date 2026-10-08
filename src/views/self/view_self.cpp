@@ -78,6 +78,9 @@ namespace big
 		if (!g.self.beast_jump)
 			components::command_checkbox<"superjump">();
 		components::command_checkbox<"nocollision">();
+		components::command_checkbox<"freeshopping">();
+		if (g.shopping.free_shopping)
+			components::command_checkbox<"fshoppinglog">();
 
 		ImGui::EndGroup();
 		ImGui::SameLine();
