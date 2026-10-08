@@ -279,6 +279,6 @@ namespace big::shopping
 			return;
 		}
 
-		src->set_return_value<BOOL>(added);
+		src->set_return_value<BOOL>(added ? TRUE : FALSE);
 	}
 }
