@@ -10,18 +10,34 @@
 namespace big::shopping
 {
 	// Basket item layout at script level (see decompiled shop scripts + Unlock-All.lua):
-	// 4 x 64-bit slots (32 bytes): [0], [1], [2]=price, [3]=value/multiplier.
-	// Which of [0]/[1] holds the itemId vs variation depends on category (inventory categories swap them).
-	// C++ internal basket has 5 x 32-bit slots: [0]=itemId, [1]=variation, [2]=price, [3]=multiplier, [4]=value.
-	// Script [2] maps to C++ [2] (price) and script [3] maps to C++ [3]; quantity param maps to C++ [4].
+	// 4 x 64-bit slots (32 bytes): [0]=item, [1]=variation/extra, [2]=price, [3]=value.
+	// Slot order is passed through as-is to the internal basket (your C++ slots 0..3),
+	// so itemId is always slot 0 and variation is always slot 1. Do NOT swap them:
+	// e.g. a hangar basket is [MP_STAT_MCKENZIE_HANGAR_OWNED, FIELD_HANGAR_INDEX_1, price, ...]
+	// and the stat lookup must use slot 1 (FIELD_HANGAR_INDEX_1, stat 1).
+	// NOTE: slot 2's high 32 bits can carry data (hangar baskets show high32=693),
+	// so only ever read/write the LOW 32 bits of the price slot and preserve the high half.
 	enum BasketSlot64 : std::size_t
 	{
-		kSlot0 = 0,
-		kSlot1 = 1,
-		kSlotPrice = 2,
-		kSlotValue = 3,
+		kSlotItemId    = 0,
+		kSlotVariation = 1,
+		kSlotPrice     = 2,
+		kSlotValue     = 3,
 		kBasketSlotCount = 4
 	};
+
+	inline constexpr std::uint64_t kLow32Mask  = 0xFFFFFFFFull;
+	inline constexpr std::uint64_t kHigh32Mask = 0xFFFFFFFF00000000ull;
+
+	inline std::uint32_t low32(std::uint64_t v)
+	{
+		return static_cast<std::uint32_t>(v & kLow32Mask);
+	}
+
+	inline void set_low32(std::uint64_t& slot, std::uint32_t v)
+	{
+		slot = (slot & kHigh32Mask) | v;
+	}
 
 	inline constexpr rage::joaat_t kFreePurchaseCoupon = "PO_COUPON_CAR_XMAS2017"_J;
 
@@ -31,36 +47,6 @@ namespace big::shopping
 	inline bool is_property_action(rage::joaat_t action)
 	{
 		return action == kActionBuyProperty || action == kActionBuyWarehouse;
-	}
-
-	// Mirrors func_713 in shop scripts: categories where itemData[0]=extra/variation and itemData[1]=item.
-	// For all other categories itemData[0]=item and itemData[1]=extra/variation.
-	inline bool is_inventory_category(rage::joaat_t category)
-	{
-		switch (category)
-		{
-		case static_cast<rage::joaat_t>(-221807075):
-		case "CATEGORY_INVENTORY_VEHICLE"_J:
-		case "CATEGORY_INVENTORY_VEHICLE_MOD"_J:
-		case "CATEGORY_INVENTORY_PROPERTIE"_J:
-		case "CATEGORY_INVENTORY_BEARD"_J:
-		case static_cast<rage::joaat_t>(1701289268):
-		case "CATEGORY_INVENTORY_HAIR"_J:
-		case "CATEGORY_INVENTORY_EYEBROWS"_J:
-		case "CATEGORY_INVENTORY_CHEST_HAIR"_J:
-		case "CATEGORY_INVENTORY_CONTACTS"_J:
-		case "CATEGORY_INVENTORY_FACEPAINT"_J:
-		case "CATEGORY_INVENTORY_BLUSHER"_J:
-		case "CATEGORY_INVENTORY_LIPSTICK"_J:
-		case "CATEGORY_INVENTORY_PROPERTY_INTERIOR"_J:
-		case "CATEGORY_INVENTORY_WAREHOUSE"_J:
-		case "CATEGORY_INVENTORY_CONTRABAND_MISSION"_J:
-		case "CATEGORY_CONTRABAND_MISSION"_J:
-		case "CATEGORY_CONTRABAND_QNTY"_J:
-		case "CATEGORY_INVENTORY_WAREHOUSE_INTERIOR"_J:
-		case "CATEGORY_WAREHOUSE_VEHICLE_INDEX"_J: return true;
-		default: return false;
-		}
 	}
 
 	inline constexpr std::array<rage::joaat_t, 55> kDiscountModifiers = {
@@ -205,26 +191,24 @@ namespace big::shopping
 			return;
 		}
 
-		const auto category     = g_current_basket_category;
-		const auto action       = g_current_basket_action;
-		const bool is_inventory = is_inventory_category(category);
-		// C++ [0]=itemId maps to script[1] for inventory categories, script[0] otherwise.
-		const std::size_t item_id_idx   = is_inventory ? kSlot1 : kSlot0;
-		const std::size_t variation_idx = is_inventory ? kSlot0 : kSlot1;
+		const auto category = g_current_basket_category;
+		const auto action   = g_current_basket_action;
 
-		const auto item_id    = static_cast<rage::joaat_t>(item[item_id_idx] & 0xFFFFFFFFu);
-		const auto variation  = static_cast<rage::joaat_t>(item[variation_idx] & 0xFFFFFFFFu);
-		const auto price      = static_cast<std::int64_t>(item[kSlotPrice]);
+		const auto item_id   = static_cast<rage::joaat_t>(low32(item[kSlotItemId]));
+		const auto variation = static_cast<rage::joaat_t>(low32(item[kSlotVariation]));
+		const auto price     = static_cast<std::int32_t>(low32(item[kSlotPrice]));
+		const auto price_hi  = static_cast<std::uint32_t>((item[kSlotPrice] >> 32) & 0xFFFFFFFFu);
 		const auto value_slot = item[kSlotValue];
 
 		if (g.shopping.log_transactions)
 		{
-			LOG(INFO) << std::format("[FreeShopping][ADD_ITEM] cat={:08X} act={:08X} inv={} [0]={:08X} [1]={:08X} price={} [3]={} qty={}", category, action, is_inventory, static_cast<std::uint32_t>(item[0]), static_cast<std::uint32_t>(item[1]), price, value_slot, qty);
+			LOG(INFO) << std::format("[FreeShopping][ADD_ITEM] cat={:08X} act={:08X} [0]={:08X} [1]={:08X} price={} price_hi={} [3]={} qty={}", category, action, item_id, variation, price, price_hi, value_slot, qty);
 		}
 
 		// Properties/warehouses can't use the coupon path; swap to the cheapest catalog entry sharing the same statValue.
 		if (is_property_action(action) && price > 0)
 		{
+			bool swapped = false;
 			if (const auto stat = shopping_lookup_stat_value(variation))
 			{
 				if (const auto* cheapest = shopping_find_cheapest(*stat, category))
@@ -234,9 +218,23 @@ namespace big::shopping
 						LOG(INFO) << std::format("[FreeShopping][PropertySwap] {:08X} -> {:08X} (price {} -> {})", variation, cheapest->m_hash, price, cheapest->m_price);
 					}
 
-					item[variation_idx] = cheapest->m_hash;
-					item[kSlotPrice]    = static_cast<std::uint64_t>(static_cast<std::int64_t>(cheapest->m_price));
+					set_low32(item[kSlotVariation], cheapest->m_hash);
+					set_low32(item[kSlotPrice], static_cast<std::uint32_t>(cheapest->m_price));
+					swapped = true;
 				}
+				else if (g.shopping.log_transactions)
+				{
+					LOG(INFO) << std::format("[FreeShopping][PropertyNoCheapest] stat={} variation={:08X}", *stat, variation);
+				}
+			}
+			else if (g.shopping.log_transactions)
+			{
+				LOG(INFO) << std::format("[FreeShopping][PropertyNoEntry] variation={:08X} item={:08X}", variation, item_id);
+			}
+
+			if (!swapped && g.shopping.log_transactions)
+			{
+				LOG(INFO) << std::format("[FreeShopping][PropertyPassthrough] full price {} kept", price);
 			}
 
 			src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM((Any*)item, qty));
@@ -254,28 +252,28 @@ namespace big::shopping
 
 		const bool apply_coupon = price > 0;
 		if (apply_coupon)
-			item[kSlotPrice] = 0;
+			set_low32(item[kSlotPrice], 0);
 
 		BOOL added = NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM((Any*)item, qty);
 
 		if (apply_coupon && added)
 		{
 			// Mirror the game's own coupon pattern (see shop scripts using PM_COUPON_*):
-			// C++ coupon = [coupon, orig_itemId, 0, orig_multiplier, orig_value].
-			// At script level that means placing the coupon + original itemId into the
-			// itemId/variation slots respecting the inventory swap.
-			std::uint64_t coupon[kBasketSlotCount]{};
-			coupon[item_id_idx]   = static_cast<std::uint64_t>(kFreePurchaseCoupon);
-			coupon[variation_idx] = static_cast<std::uint64_t>(item_id);
-			coupon[kSlotPrice]    = 0;
-			coupon[kSlotValue]    = value_slot;
+			// coupon = [coupon_hash, orig_itemId, 0, orig_value].
+			// NOTE: heap-allocate and intentionally leak: the basket keeps the pointer
+			// for checkout (same reason Lua scripts leak 32 bytes per item).
+			auto* coupon           = new std::uint64_t[kBasketSlotCount]();
+			coupon[kSlotItemId]    = static_cast<std::uint64_t>(kFreePurchaseCoupon);
+			coupon[kSlotVariation] = static_cast<std::uint64_t>(item_id);
+			coupon[kSlotPrice]     = (item[kSlotPrice] & kHigh32Mask);
+			coupon[kSlotValue]     = value_slot;
 
 			if (g.shopping.log_transactions)
 			{
-				LOG(INFO) << std::format("[FreeShopping][Coupon] [0]={:08X} [1]={:08X} price=0 [3]={} qty={}", static_cast<std::uint32_t>(coupon[0]), static_cast<std::uint32_t>(coupon[1]), value_slot, qty);
+				LOG(INFO) << std::format("[FreeShopping][Coupon] [0]={:08X} [1]={:08X} price=0 [3]={} qty={}", low32(coupon[0]), low32(coupon[1]), value_slot, qty);
 			}
 
-			src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM((Any*)&coupon[0], qty));
+			src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM((Any*)coupon, qty));
 			return;
 		}
 
