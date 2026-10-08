@@ -256,7 +256,7 @@ namespace big::shopping
 		if (apply_coupon)
 			item[kSlotPrice] = 0;
 
-		const BOOL added = NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM((Any*)item, qty);
+		BOOL added = NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM((Any*)item, qty);
 
 		if (apply_coupon && added)
 		{
