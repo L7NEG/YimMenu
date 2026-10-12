@@ -3,5 +3,5 @@
 
 namespace big
 {
-	bool_command g_free_shopping("freeshopping", "FREE_SHOPPING", "FREE_SHOPPING_DESC", free_shopping::g_enabled);
+	bool_command g_free_shopping("freeshopping", "Free Shopping", "Allows you to buy everything for free.", free_shopping::g_enabled);
 }

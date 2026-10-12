@@ -159,6 +159,7 @@ namespace big
 		ImGui::Checkbox("VIEW_NET_SESSION_FIX_VEHICLE"_T.data(), &g.session.vehicle_fix_all);
 		components::command_checkbox<"harass">();
 		ImGui::Checkbox("SPAM_KILLFEED"_T.data(), &g.session.spam_killfeed);
+		components::command_checkbox<"freeshopping">();
 		ImGui::EndGroup();
 
 		ImGui::SameLine();
