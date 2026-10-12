@@ -307,24 +307,7 @@ namespace big::free_shopping
 					item_data->price = best_price;
 				}
 
-				const auto swapped_id = static_cast<rage::joaat_t>(item_data->item);
-				item_data->price      = 0;
-
-				BOOL item_added = NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM(reinterpret_cast<Any*>(item_data), quantity);
-
-				if (item_added)
-				{
-					basket_item_data coupon_data{};
-					coupon_data.key        = free_purchase_coupon;
-					coupon_data.item       = swapped_id;
-					coupon_data.price      = 0;
-					coupon_data.stat_value = item_data->stat_value;
-
-					src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM(reinterpret_cast<Any*>(&coupon_data), quantity));
-					return;
-				}
-
-				src->set_return_value<BOOL>(std::move(item_added));
+				src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM(reinterpret_cast<Any*>(item_data), quantity));
 				return;
 			}
 		}
