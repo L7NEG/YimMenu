@@ -35,7 +35,6 @@ namespace rage
 	class atArray;
 
 	class RageSecurity;
-	class netCatalog;
 	class netTime;
 	class rlGamerInfo;
 	struct game_skeleton;
@@ -423,8 +422,6 @@ namespace big
 		PVOID m_game_skeleton_update;
 
 		PVOID m_script_vm_on_enter_end;
-
-		rage::netCatalog* m_net_catalog{};
 	};
 #pragma pack(pop)
 	static_assert(sizeof(gta_pointers) % 8 == 0, "Pointers are not properly aligned");

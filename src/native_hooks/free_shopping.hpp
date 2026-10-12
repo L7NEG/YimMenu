@@ -1,6 +1,5 @@
 #pragma once
 #include "native_hooks.hpp"
-#include "pointers.hpp"
 #include "types/netshop/netCatalog.hpp"
 
 #include "memory/module.hpp"
@@ -11,6 +10,7 @@
 namespace big::free_shopping
 {
 	inline bool g_enabled = false;
+	inline rage::netCatalog* g_net_catalog = nullptr;
 
 	struct basket_item_data
 	{
@@ -30,9 +30,7 @@ namespace big::free_shopping
 
 	inline void ensure_catalog()
 	{
-		if (!g_pointers)
-			return;
-		if (g_pointers->m_gta.m_net_catalog)
+		if (g_net_catalog)
 			return;
 
 		static bool tried = false;
@@ -42,9 +40,9 @@ namespace big::free_shopping
 
 		const auto mod = memory::module("GTA5.exe");
 		if (auto res = mod.scan(memory::pattern("0F 82 55 FF FF FF 44 89 7C 24 30")))
-			g_pointers->m_gta.m_net_catalog = res->add(0xB).add(3).rip().as<rage::netCatalog*>();
+			g_net_catalog = res->add(0xB).add(3).rip().as<rage::netCatalog*>();
 
-		if (!g_pointers->m_gta.m_net_catalog)
+		if (!g_net_catalog)
 			LOG(WARNING) << "free_shopping: NetCatalog not found, property buys will use coupon fallback";
 	}
 
@@ -52,7 +50,7 @@ namespace big::free_shopping
 	{
 		ensure_catalog();
 
-		auto catalog = g_pointers->m_gta.m_net_catalog;
+		auto catalog = g_net_catalog;
 		if (!catalog)
 			return -1;
 
@@ -147,7 +145,7 @@ namespace big::free_shopping
 
 		if (!g_enabled)
 		{
-			src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM(item_data, quantity));
+			src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM(reinterpret_cast<Any*>(item_data), quantity));
 			return;
 		}
 
@@ -160,7 +158,7 @@ namespace big::free_shopping
 
 			if (stat_value >= 0)
 			{
-				auto catalog            = g_pointers->m_gta.m_net_catalog;
+				auto catalog            = g_net_catalog;
 				rage::joaat_t best_hash = 0;
 				int best_price          = INT_MAX;
 
@@ -184,7 +182,7 @@ namespace big::free_shopping
 					item_data->price = best_price;
 				}
 
-				src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM(item_data, quantity));
+				src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM(reinterpret_cast<Any*>(item_data), quantity));
 				return;
 			}
 		}
@@ -200,7 +198,7 @@ namespace big::free_shopping
 		if (apply_coupon)
 			item_data->price = 0;
 
-		const BOOL item_added = NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM(item_data, quantity);
+		BOOL item_added = NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM(reinterpret_cast<Any*>(item_data), quantity);
 
 		if (apply_coupon && item_added)
 		{
@@ -210,7 +208,7 @@ namespace big::free_shopping
 			coupon_data.price      = 0;
 			coupon_data.stat_value = item_data->stat_value;
 
-			src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM(&coupon_data, quantity));
+			src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM(reinterpret_cast<Any*>(&coupon_data), quantity));
 			return;
 		}
 
