@@ -1,11 +1,13 @@
 #pragma once
+#include "game/features/recovery/free_shopping_data.hpp"
+#include "invoker/invoker.hpp"
 #include "native_hooks.hpp"
 #include "types/netshop/netCatalog.hpp"
 
 #include "memory/module.hpp"
-#include "memory/pattern.hpp"
 
 #include <climits>
+#include <cstring>
 
 namespace big::free_shopping
 {
@@ -28,41 +30,180 @@ namespace big::free_shopping
 		return action == "NET_SHOP_ACTION_BUY_PROPERTY"_J || action == "NET_SHOP_ACTION_BUY_WAREHOUSE"_J;
 	}
 
-	inline void ensure_catalog()
+	inline bool catalog_contains(rage::netCatalog* catalog, rage::joaat_t hash)
+	{
+		if (!catalog)
+			return false;
+
+		__try
+		{
+			const auto count   = catalog->m_BucketCount;
+			const auto buckets = catalog->m_BucketArray;
+			if (!count || count > 8192 || !buckets)
+				return false;
+
+			std::size_t visited = 0;
+			for (std::uint16_t i = 0; i < count; ++i)
+			{
+				for (auto node = buckets[i]; node; node = node->m_Next)
+				{
+					if (++visited > 30000)
+						return false;
+					if (node->Item()->m_Hash == hash)
+						return true;
+				}
+			}
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+			return false;
+		}
+		return false;
+	}
+
+	inline rage::netCatalog* scan_handler_for_catalog(rage::scrNativeHandler handler, rage::joaat_t want_hash)
+	{
+		static const auto mod = memory::module("GTA5.exe");
+
+		const auto base = reinterpret_cast<std::uintptr_t>(handler);
+		if (!mod.contains(memory::handle(base)))
+			return nullptr;
+
+		for (std::size_t i = 0; i + 7 < 0x600; ++i)
+		{
+			const auto rex = *reinterpret_cast<const std::uint8_t*>(base + i);
+			if (rex < 0x48 || rex > 0x4F)
+				continue;
+			const auto op = *reinterpret_cast<const std::uint8_t*>(base + i + 1);
+			if (op != 0x8B && op != 0x8D)
+				continue;
+			if ((*reinterpret_cast<const std::uint8_t*>(base + i + 2) & 0xC7) != 0x05)
+				continue;
+
+			std::int32_t disp;
+			std::memcpy(&disp, reinterpret_cast<const void*>(base + i + 3), sizeof(disp));
+			const auto target = reinterpret_cast<rage::netCatalog*>(base + i + 7 + disp);
+			if (!mod.contains(memory::handle(target)))
+				continue;
+			if (catalog_contains(target, want_hash))
+				return target;
+		}
+		return nullptr;
+	}
+
+	inline void ensure_live_catalog(rage::joaat_t want_hash)
 	{
 		if (g_net_catalog)
 			return;
 
-		static bool tried = false;
-		if (tried)
-			return;
-		tried = true;
+		constexpr NativeIndex probes[] = {
+		    NativeIndex::NET_GAMESERVER_GET_PRICE,
+		    NativeIndex::NET_GAMESERVER_CATALOG_ITEM_IS_VALID,
+		    NativeIndex::NET_GAMESERVER_CATALOG_IS_VALID,
+		};
+		for (auto idx : probes)
+		{
+			if (auto handler = native_invoker::get_handlers()[static_cast<int>(idx)])
+			{
+				if (auto found = scan_handler_for_catalog(handler, want_hash))
+				{
+					g_net_catalog = found;
+					LOG(INFO) << "free_shopping: NetCatalog resolved via native handler " << static_cast<int>(idx);
+					return;
+				}
+			}
+		}
+	}
 
-		const auto mod = memory::module("GTA5.exe");
-		if (auto res = mod.scan(memory::pattern("0F 82 55 FF FF FF 44 89 7C 24 30")))
-			g_net_catalog = res->add(0xB).add(3).rip().as<rage::netCatalog*>();
+	inline int live_stat_for_hash(rage::joaat_t item_hash)
+	{
+		__try
+		{
+			int result = -1;
+			g_net_catalog->ForEachItem([&](const rage::netCatalogBaseItem& item) {
+				if (result != -1)
+					return;
+				if (item.m_Hash == item_hash)
+					result = item.m_StatValue;
+			});
+			return result;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+			return -1;
+		}
+	}
 
-		if (!g_net_catalog)
-			LOG(WARNING) << "free_shopping: NetCatalog not found, property buys will use coupon fallback";
+	inline bool live_cheapest_for_stat(int stat_value, rage::joaat_t& out_hash, int& out_price)
+	{
+		__try
+		{
+			rage::joaat_t best_hash = 0;
+			int best_price          = INT_MAX;
+
+			g_net_catalog->ForEachItem([&](const rage::netCatalogBaseItem& entry) {
+				if (entry.m_StatValue != stat_value)
+					return;
+				if (entry.m_Price < 0)
+					return;
+				if (entry.m_Price >= best_price)
+					return;
+				best_hash  = entry.m_Hash;
+				best_price = entry.m_Price;
+			});
+
+			if (best_hash)
+			{
+				out_hash  = best_hash;
+				out_price = best_price;
+				return true;
+			}
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+			return false;
+		}
+		return false;
 	}
 
 	inline int get_stat_value_from_hash(rage::joaat_t item_hash)
 	{
-		ensure_catalog();
+		ensure_live_catalog(item_hash);
 
-		auto catalog = g_net_catalog;
-		if (!catalog)
-			return -1;
+		if (g_net_catalog)
+		{
+			if (int stat = live_stat_for_hash(item_hash); stat != -1)
+				return stat;
+		}
 
-		int result = -1;
-		catalog->ForEachItem([&](const rage::netCatalogBaseItem& item) {
-			if (result != -1)
-				return;
-			if (item.m_Hash == item_hash)
-				result = item.m_StatValue;
-		});
+		for (const auto& entry : data::property_stats)
+		{
+			if (entry.m_hash == item_hash)
+				return entry.m_stat_value;
+		}
 
-		return result;
+		return -1;
+	}
+
+	inline bool get_cheapest_for_stat(int stat_value, rage::joaat_t& out_hash, int& out_price)
+	{
+		if (g_net_catalog)
+		{
+			if (live_cheapest_for_stat(stat_value, out_hash, out_price))
+				return true;
+		}
+
+		for (const auto& entry : data::cheapest_by_stat)
+		{
+			if (entry.m_stat_value == stat_value)
+			{
+				out_hash  = entry.m_hash;
+				out_price = entry.m_price;
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	constexpr rage::joaat_t discount_modifiers[] = {
@@ -158,25 +299,9 @@ namespace big::free_shopping
 
 			if (stat_value >= 0)
 			{
-				auto catalog            = g_net_catalog;
 				rage::joaat_t best_hash = 0;
-				int best_price          = INT_MAX;
-
-				if (catalog)
-				{
-					catalog->ForEachItem([&](const rage::netCatalogBaseItem& entry) {
-						if (entry.m_StatValue != stat_value)
-							return;
-						if (entry.m_Price < 0)
-							return;
-						if (entry.m_Price >= best_price)
-							return;
-						best_hash  = entry.m_Hash;
-						best_price = entry.m_Price;
-					});
-				}
-
-				if (best_hash)
+				int best_price          = 0;
+				if (get_cheapest_for_stat(stat_value, best_hash, best_price) && best_hash)
 				{
 					item_data->item  = best_hash;
 					item_data->price = best_price;
