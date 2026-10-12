@@ -212,7 +212,7 @@ namespace big::free_shopping
 			return;
 		}
 
-		src->set_return_value<BOOL>(item_added);
+		src->set_return_value<BOOL>(std::move(item_added));
 	}
 
 	inline void USE_FAKE_MP_CASH(rage::scrNativeCallContext* src)
