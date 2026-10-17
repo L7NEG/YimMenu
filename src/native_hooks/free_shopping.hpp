@@ -23,11 +23,36 @@ namespace big::free_shopping
 	};
 	static_assert(sizeof(basket_item_data) == 32);
 
-	constexpr rage::joaat_t free_purchase_coupon = "PO_COUPON_CAR_XMAS2017"_J;
+	struct catalog_item_info
+	{
+		int stat_value         = -1;
+		rage::joaat_t category = 0;
+	};
+
+	constexpr rage::joaat_t free_purchase_coupon        = "PO_COUPON_CAR_XMAS2017"_J;
+	constexpr rage::joaat_t category_casino_chips       = "CATEGORY_CASINO_CHIPS"_J;
+	constexpr rage::joaat_t category_casino_chip_reason = "CATEGORY_CASINO_CHIP_REASON"_J;
+	constexpr rage::joaat_t category_property           = "CATEGORY_PROPERTIE"_J;
+	constexpr rage::joaat_t category_property_interior  = "CATEGORY_PROPERTY_INTERIOR"_J;
+	constexpr rage::joaat_t category_warehouse          = "CATEGORY_WAREHOUSE"_J;
+	constexpr rage::joaat_t category_warehouse_interior = "CATEGORY_WAREHOUSE_INTERIOR"_J;
 
 	inline bool is_property_action(rage::joaat_t action)
 	{
 		return action == "NET_SHOP_ACTION_BUY_PROPERTY"_J || action == "NET_SHOP_ACTION_BUY_WAREHOUSE"_J;
+	}
+
+	inline bool is_property_category(rage::joaat_t category)
+	{
+		return category == category_property
+		    || category == category_property_interior
+		    || category == category_warehouse
+		    || category == category_warehouse_interior;
+	}
+
+	inline bool is_chip_category(rage::joaat_t category)
+	{
+		return category == category_casino_chips || category == category_casino_chip_reason;
 	}
 
 	inline bool catalog_contains(rage::netCatalog* catalog, rage::joaat_t hash)
@@ -119,47 +144,71 @@ namespace big::free_shopping
 		}
 	}
 
-	inline int live_stat_for_hash(rage::joaat_t item_hash)
+	inline bool live_item_info_for_hash(rage::joaat_t item_hash, catalog_item_info& out)
 	{
+		if (!item_hash || !g_net_catalog)
+			return false;
+
 		__try
 		{
-			int result = -1;
+			bool found = false;
 			g_net_catalog->ForEachItem([&](const rage::netCatalogBaseItem& item) {
-				if (result != -1)
+				if (found)
 					return;
 				if (item.m_Hash == item_hash)
-					result = item.m_StatValue;
+				{
+					out.stat_value = item.m_StatValue;
+					out.category   = item.m_CategoryHash;
+					found          = true;
+				}
 			});
-			return result;
+			return found;
 		}
 		__except (EXCEPTION_EXECUTE_HANDLER)
 		{
-			return -1;
+			return false;
 		}
 	}
 
-	inline bool live_cheapest_for_stat(int stat_value, rage::joaat_t& out_hash, int& out_price)
+	inline bool live_cheapest_for_stat(int stat_value, rage::joaat_t category, rage::joaat_t& out_hash, int& out_price)
 	{
+		if (!g_net_catalog)
+			return false;
+
 		__try
 		{
-			rage::joaat_t best_hash = 0;
-			int best_price          = INT_MAX;
+			rage::joaat_t stat_hash = 0;
+			rage::joaat_t any_hash  = 0;
+			int stat_price          = INT_MAX;
+			int any_price           = INT_MAX;
 
 			g_net_catalog->ForEachItem([&](const rage::netCatalogBaseItem& entry) {
-				if (entry.m_StatValue != stat_value)
+				if (entry.m_CategoryHash != category)
 					return;
 				if (entry.m_Price < 0)
 					return;
-				if (entry.m_Price >= best_price)
-					return;
-				best_hash  = entry.m_Hash;
-				best_price = entry.m_Price;
+				if (entry.m_StatValue == stat_value && entry.m_Price < stat_price)
+				{
+					stat_hash  = entry.m_Hash;
+					stat_price = entry.m_Price;
+				}
+				if (entry.m_Price < any_price)
+				{
+					any_hash  = entry.m_Hash;
+					any_price = entry.m_Price;
+				}
 			});
 
-			if (best_hash)
+			if (stat_hash && stat_price <= any_price)
 			{
-				out_hash  = best_hash;
-				out_price = best_price;
+				out_hash  = stat_hash;
+				out_price = stat_price;
+				return true;
+			}
+			if (any_hash)
+			{
+				out_hash  = any_hash;
+				out_price = any_price;
 				return true;
 			}
 		}
@@ -170,22 +219,22 @@ namespace big::free_shopping
 		return false;
 	}
 
-	inline int get_stat_value_from_hash(rage::joaat_t item_hash)
+	inline bool item_info_for_hash(rage::joaat_t item_hash, catalog_item_info& out)
 	{
+		if (!item_hash)
+			return false;
+
 		ensure_live_catalog(item_hash);
 
-		if (g_net_catalog)
-			return live_stat_for_hash(item_hash);
-
-		return -1;
+		return live_item_info_for_hash(item_hash, out);
 	}
 
-	inline bool get_cheapest_for_stat(int stat_value, rage::joaat_t& out_hash, int& out_price)
+	inline bool get_cheapest_for_stat(int stat_value, rage::joaat_t category, rage::joaat_t& out_hash, int& out_price)
 	{
 		if (!g_net_catalog)
 			return false;
 
-		return live_cheapest_for_stat(stat_value, out_hash, out_price);
+		return live_cheapest_for_stat(stat_value, category, out_hash, out_price);
 	}
 
 	constexpr rage::joaat_t discount_modifiers[] = {
@@ -258,6 +307,9 @@ namespace big::free_shopping
 		current_basket_category = src->get_arg<rage::joaat_t>(1);
 		current_basket_action   = src->get_arg<rage::joaat_t>(2);
 
+		if (g_enabled)
+			LOG(INFO) << "free_shopping: basket category " << HEX_TO_UPPER(static_cast<std::uint32_t>(current_basket_category)) << " action " << HEX_TO_UPPER(static_cast<std::uint32_t>(current_basket_action));
+
 		src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BASKET_START(src->get_arg<int*>(0), current_basket_category, current_basket_action, src->get_arg<int>(3)));
 	}
 
@@ -272,31 +324,51 @@ namespace big::free_shopping
 			return;
 		}
 
-		const auto item_id = static_cast<rage::joaat_t>(item_data->key);
-		const int price    = item_data->price;
+		const auto key_hash  = static_cast<rage::joaat_t>(item_data->key);
+		const auto item_hash = static_cast<rage::joaat_t>(item_data->item);
+		const int price      = item_data->price;
 
-		if (is_property_action(current_basket_action) && price > 0)
-		{
-			const int stat_value = get_stat_value_from_hash(static_cast<rage::joaat_t>(item_data->item));
-
-			if (stat_value >= 0)
-			{
-				rage::joaat_t best_hash = 0;
-				int best_price          = 0;
-				if (get_cheapest_for_stat(stat_value, best_hash, best_price) && best_hash)
-				{
-					item_data->item  = best_hash;
-					item_data->price = best_price;
-				}
-
-				src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM(reinterpret_cast<Any*>(item_data), quantity));
-				return;
-			}
-		}
-
-		if (is_discount_modifier(item_id))
+		if (is_discount_modifier(key_hash))
 		{
 			src->set_return_value<BOOL>(TRUE);
+			return;
+		}
+
+		catalog_item_info info;
+		const bool have_info = item_info_for_hash(item_hash, info) || item_info_for_hash(key_hash, info);
+
+		if (current_basket_category == category_casino_chips || (have_info && is_chip_category(info.category)))
+		{
+			src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM(reinterpret_cast<Any*>(item_data), quantity));
+			return;
+		}
+
+		if (is_property_action(current_basket_action) || (have_info && is_property_category(info.category)))
+		{
+			if (price > 0)
+			{
+				if (have_info)
+				{
+					rage::joaat_t best_hash = 0;
+					int best_price          = 0;
+					if (get_cheapest_for_stat(info.stat_value, info.category, best_hash, best_price) && best_hash && best_price < price)
+					{
+						LOG(INFO) << "free_shopping: property item " << HEX_TO_UPPER(static_cast<std::uint32_t>(key_hash)) << '/' << HEX_TO_UPPER(static_cast<std::uint32_t>(item_hash)) << " category " << HEX_TO_UPPER(static_cast<std::uint32_t>(info.category)) << " stat " << info.stat_value << " price " << price << " -> " << HEX_TO_UPPER(static_cast<std::uint32_t>(best_hash)) << " price " << best_price;
+						item_data->item  = best_hash;
+						item_data->price = best_price;
+					}
+					else
+					{
+						LOG(INFO) << "free_shopping: property item " << HEX_TO_UPPER(static_cast<std::uint32_t>(key_hash)) << '/' << HEX_TO_UPPER(static_cast<std::uint32_t>(item_hash)) << " category " << HEX_TO_UPPER(static_cast<std::uint32_t>(info.category)) << " stat " << info.stat_value << " price " << price << " (no cheaper candidate)";
+					}
+				}
+				else
+				{
+					LOG(INFO) << "free_shopping: property item " << HEX_TO_UPPER(static_cast<std::uint32_t>(key_hash)) << '/' << HEX_TO_UPPER(static_cast<std::uint32_t>(item_hash)) << " not found in catalog";
+				}
+			}
+
+			src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM(reinterpret_cast<Any*>(item_data), quantity));
 			return;
 		}
 
@@ -311,7 +383,7 @@ namespace big::free_shopping
 		{
 			basket_item_data coupon_data{};
 			coupon_data.key        = free_purchase_coupon;
-			coupon_data.item       = item_id;
+			coupon_data.item       = key_hash ? key_hash : item_hash;
 			coupon_data.price      = 0;
 			coupon_data.stat_value = item_data->stat_value;
 
