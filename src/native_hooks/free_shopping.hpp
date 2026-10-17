@@ -489,10 +489,13 @@ namespace big::free_shopping
 
 		if (current_basket_category == category_casino_chips || (have_info && is_chip_category(info.category)))
 		{
+			if (g_enabled)
+				LOG(INFO) << "free_shopping: chip basket line " << HEX_TO_UPPER(static_cast<std::uint32_t>(key_hash)) << '/' << HEX_TO_UPPER(static_cast<std::uint32_t>(item_hash)) << " price " << price << " quantity " << quantity;
+
 			if (current_basket_action == action_casino_chips_spend && price == 1 && quantity > 1 && (key_hash == casino_chips_item || item_hash == casino_chips_item))
 			{
-				LOG(INFO) << "free_shopping: casino chip spend " << quantity << " -> 0";
-				src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM(reinterpret_cast<Any*>(item_data), 0));
+				LOG(INFO) << "free_shopping: casino chip spend " << quantity << " -> 1";
+				src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM(reinterpret_cast<Any*>(item_data), 1));
 				return;
 			}
 
