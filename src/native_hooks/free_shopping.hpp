@@ -7,12 +7,12 @@
 #include "memory/module.hpp"
 
 #include <climits>
+#include <cstdio>
 #include <cstring>
 
 namespace big::free_shopping
 {
 	inline bool g_enabled = false;
-	inline rage::netCatalog* g_net_catalog = nullptr;
 
 	struct basket_item_data
 	{
@@ -23,33 +23,17 @@ namespace big::free_shopping
 	};
 	static_assert(sizeof(basket_item_data) == 32);
 
-	struct catalog_item_info
-	{
-		int stat_value         = -1;
-		rage::joaat_t category = 0;
-	};
-
 	constexpr rage::joaat_t free_purchase_coupon        = "PO_COUPON_CAR_XMAS2017"_J;
 	constexpr rage::joaat_t category_casino_chips       = "CATEGORY_CASINO_CHIPS"_J;
 	constexpr rage::joaat_t category_casino_chip_reason = "CATEGORY_CASINO_CHIP_REASON"_J;
 	constexpr rage::joaat_t casino_chips_item           = "CASINO_CHIPS_v0"_J;
 	constexpr rage::joaat_t action_casino_chips_spend   = 0xFEAE09E5;
 	constexpr rage::joaat_t category_property           = "CATEGORY_PROPERTIE"_J;
-	constexpr rage::joaat_t category_property_interior  = "CATEGORY_PROPERTY_INTERIOR"_J;
 	constexpr rage::joaat_t category_warehouse          = "CATEGORY_WAREHOUSE"_J;
-	constexpr rage::joaat_t category_warehouse_interior = "CATEGORY_WAREHOUSE_INTERIOR"_J;
 
 	inline bool is_property_action(rage::joaat_t action)
 	{
 		return action == "NET_SHOP_ACTION_BUY_PROPERTY"_J || action == "NET_SHOP_ACTION_BUY_WAREHOUSE"_J;
-	}
-
-	inline bool is_property_category(rage::joaat_t category)
-	{
-		return category == category_property
-		    || category == category_property_interior
-		    || category == category_warehouse
-		    || category == category_warehouse_interior;
 	}
 
 	inline bool is_chip_category(rage::joaat_t category)
@@ -57,334 +41,112 @@ namespace big::free_shopping
 		return category == category_casino_chips || category == category_casino_chip_reason;
 	}
 
-	inline bool catalog_contains(rage::netCatalog* catalog, rage::joaat_t hash)
+	inline rage::joaat_t joaat_string(const char* string)
 	{
-		if (!catalog)
-			return false;
-
-		__try
+		rage::joaat_t result = 0;
+		for (const char* c = string; *c; ++c)
 		{
-			const auto count   = catalog->m_BucketCount;
-			const auto buckets = catalog->m_BucketArray;
-			if (!count || count > 32768 || !buckets)
-				return false;
-
-			std::size_t visited = 0;
-			for (std::uint16_t i = 0; i < count; ++i)
-			{
-				for (auto node = buckets[i]; node; node = node->m_Next)
-				{
-					if (++visited > 150000)
-						return false;
-					if (node->Item()->m_Hash == hash)
-						return true;
-				}
-			}
+			result += *c >= 'A' && *c <= 'Z' ? (*c | 1 << 5) : *c;
+			result += (result << 10);
+			result ^= (result >> 6);
 		}
-		__except (EXCEPTION_EXECUTE_HANDLER)
-		{
-			return false;
-		}
-		return false;
+		result += (result << 3);
+		result ^= (result >> 11);
+		result += (result << 15);
+		return result;
 	}
 
-	inline memory::module& game_module()
+	inline void property_price_check(const char* name, rage::joaat_t category, rage::joaat_t& best_hash, int& best_price)
 	{
-		static memory::module mod("GTA5.exe");
-		return mod;
+		const auto hash  = joaat_string(name);
+		const int  price = NETSHOPPING::NET_GAMESERVER_GET_PRICE(hash, category, TRUE);
+		if (price > 0 && (best_hash == 0 || price < best_price))
+		{
+			best_hash  = hash;
+			best_price = price;
+		}
 	}
 
-	inline void* try_load_pointer(const void* address)
+	struct cheapest_cache
 	{
-		void* value = nullptr;
-		__try
-		{
-			value = *reinterpret_cast<void* const*>(address);
-		}
-		__except (EXCEPTION_EXECUTE_HANDLER)
-		{
-			value = nullptr;
-		}
-		return value;
-	}
-
-	struct catalog_scan_stats
-	{
-		int handlers               = 0;
-		int functions              = 0;
-		int candidates             = 0;
-		rage::netCatalog* best     = nullptr;
-		std::uint16_t best_buckets = 0;
-		std::uint32_t best_version = 0;
-		std::uint32_t best_crc     = 0;
+		bool done         = false;
+		rage::joaat_t hash = 0;
+		int price          = 0;
 	};
 
-	inline bool catalog_candidate_sane(rage::netCatalog* catalog, std::uint16_t& buckets, std::uint32_t& version, std::uint32_t& crc)
+	inline bool cheapest_for_category(rage::joaat_t category, rage::joaat_t& out_hash, int& out_price)
 	{
-		__try
-		{
-			buckets = catalog->m_BucketCount;
-			version = catalog->m_CatalogVersion;
-			crc     = catalog->m_CatalogCRC;
-			return catalog->m_BucketArray != nullptr && buckets != 0 && buckets <= 32768;
-		}
-		__except (EXCEPTION_EXECUTE_HANDLER)
-		{
-			return false;
-		}
-	}
+		static cheapest_cache caches[2];
+		cheapest_cache* cache = category == category_warehouse ? &caches[1] : &caches[0];
 
-	inline rage::netCatalog* scan_handler_for_catalog(rage::scrNativeHandler handler, rage::joaat_t want_hash, catalog_scan_stats& stats)
-	{
-		const auto& mod = game_module();
-
-		struct code_ref
+		if (cache->done)
 		{
-			std::uintptr_t address;
-			std::size_t size;
-			int depth;
+			out_hash  = cache->hash;
+			out_price = cache->price;
+			return cache->hash != 0;
+		}
+
+		rage::joaat_t best_hash = 0;
+		int best_price          = 0;
+		char name[64];
+
+		const auto check = [&](const char* pattern, int n) {
+			std::snprintf(name, sizeof(name), pattern, n);
+			property_price_check(name, category, best_hash, best_price);
 		};
 
-		code_ref queue[64];
-		int queue_size = 0;
-
-		const auto push_range = [&](std::uintptr_t address, std::size_t size, int depth) {
-			if (!address || queue_size >= 64 || !mod.contains(memory::handle(address)))
-				return;
-			for (int i = 0; i < queue_size; ++i)
-			{
-				if (queue[i].address == address)
-					return;
-			}
-			queue[queue_size++] = {address, size, depth};
-		};
-
-		const auto consider_candidate = [&](std::uintptr_t target) -> rage::netCatalog* {
-			rage::netCatalog* candidates[2] = {};
-			int count                      = 0;
-
-			if (mod.contains(memory::handle(target)))
-				candidates[count++] = reinterpret_cast<rage::netCatalog*>(target);
-
-			if (const auto loaded = try_load_pointer(reinterpret_cast<const void*>(target)))
-			{
-				if (loaded != reinterpret_cast<void*>(target))
-					candidates[count++] = reinterpret_cast<rage::netCatalog*>(loaded);
-			}
-
-			for (int c = 0; c < count; ++c)
-			{
-				std::uint16_t buckets = 0;
-				std::uint32_t version = 0;
-				std::uint32_t crc     = 0;
-				if (!catalog_candidate_sane(candidates[c], buckets, version, crc))
-					continue;
-
-				stats.candidates++;
-				stats.best         = candidates[c];
-				stats.best_buckets = buckets;
-				stats.best_version = version;
-				stats.best_crc     = crc;
-
-				if (catalog_contains(candidates[c], want_hash))
-					return candidates[c];
-			}
-			return nullptr;
-		};
-
-		push_range(reinterpret_cast<std::uintptr_t>(handler), 0x800, 0);
-
-		for (int qi = 0; qi < queue_size; ++qi)
+		if (category == category_warehouse)
 		{
-			const auto address = queue[qi].address;
-			const auto size    = queue[qi].size;
-			const auto depth   = queue[qi].depth;
-			stats.functions++;
+			for (int n = 0; n <= 32; ++n)
+				check("FACTORY_INDEX_%d_t0_v0", n);
+			for (int n = 0; n <= 22; ++n)
+				check("WH_INDEX_%d_t0_v0", n);
+			for (int n = 0; n <= 10; ++n)
+				check("BHUB_INDEX_%d_t0_v0", n);
+			for (int n = 0; n <= 10; ++n)
+				check("IE_WH_INDEX_%d_t0_v0", n);
+			for (int n = 0; n <= 10; ++n)
+				check("NCLU_INDEX_%d_t0_v0", n);
+			for (int n = 0; n <= 9; ++n)
+				check("DBASE_INDEX_%d_t0_v0", n);
+			for (int n = 0; n <= 6; ++n)
+				check("ARC_INDEX_%d_t0_v0", n);
+			for (int n = 0; n <= 5; ++n)
+				check("HANGAR_INDEX_%d_t0_v0", n);
+			for (int n = 1; n <= 5; ++n)
+				check("BAOF_INDEX_%d_t0_v0", n);
+			for (int n = 1; n <= 5; ++n)
+				check("AUTO_SHOP_INDEX_%d_t0_v0", n);
+			for (int n = 1; n <= 5; ++n)
+				check("SALVAGE_YARD_INDEX_%d_t0_v0", n);
+			for (int n = 1; n <= 4; ++n)
+				check("FIXER_HQ_INDEX_%d_t0_v0", n);
 
-			for (std::size_t i = 0; i + 7 < size; ++i)
-			{
-				const auto b0 = *reinterpret_cast<const std::uint8_t*>(address + i);
-				const auto b1 = *reinterpret_cast<const std::uint8_t*>(address + i + 1);
-
-				if (depth < 2 && (b0 == 0xE8 || b0 == 0xE9))
-				{
-					std::int32_t rel;
-					std::memcpy(&rel, reinterpret_cast<const void*>(address + i + 1), sizeof(rel));
-					push_range(address + i + 5 + rel, 0x400, depth + 1);
-					i += 4;
-					continue;
-				}
-
-				if (depth < 2 && b0 == 0xFF && b1 == 0x25)
-				{
-					std::int32_t rel;
-					std::memcpy(&rel, reinterpret_cast<const void*>(address + i + 2), sizeof(rel));
-					const auto slot = address + i + 6 + rel;
-					if (mod.contains(memory::handle(slot)))
-					{
-						const auto target = reinterpret_cast<std::uintptr_t>(try_load_pointer(reinterpret_cast<const void*>(slot)));
-						push_range(target, 0x400, depth + 1);
-					}
-					i += 5;
-					continue;
-				}
-
-				if (b0 < 0x48 || b0 > 0x4F)
-					continue;
-				if (b1 != 0x8B && b1 != 0x8D && b1 != 0x89 && b1 != 0x39 && b1 != 0x3B)
-					continue;
-				if ((*reinterpret_cast<const std::uint8_t*>(address + i + 2) & 0xC7) != 0x05)
-					continue;
-
-				std::int32_t disp;
-				std::memcpy(&disp, reinterpret_cast<const void*>(address + i + 3), sizeof(disp));
-				if (auto found = consider_candidate(address + i + 7 + disp))
-					return found;
-			}
+			for (const char* special : {"CAR_CLUB_MEMBER_v0", "FIELD_HANGAR_INDEX_1_v0", "HACKER_DEN_INDEX_1_v0", "LAB_EQUIPMENT_INSTALLED_v0", "MANSION_INDEX1_t0_v0", "MANSION_INDEX2_t0_v0", "MANSION_INDEX3_t0_v0", "MP_ARENAG_1_t0_v0", "MP_CASINO_1_t0_v0", "MULTISTOREY_GARAGE_INDEX_1_v0", "SMALL_BUSINESS_INDEX_1_v0", "SMALL_BUSINESS_INDEX_2_v0", "SMALL_BUSINESS_INDEX_3_v0"})
+				property_price_check(special, category, best_hash, best_price);
+		}
+		else
+		{
+			for (int n = 1; n <= 95; ++n)
+				check("PR_MP_PROP_%d_t0_v0", n);
+			for (int n : {5, 31, 34, 38, 40, 42})
+				check("PR_MP_PROP_%d_t0_v1", n);
+			for (int n = 1; n <= 12; ++n)
+				check("PR_MP_PROP_CLUBH%d_t0_v0", n);
+			for (int n = 1; n <= 4; ++n)
+				check("PR_MP_PROP_OFF%d_t0_v0", n);
+			for (int n = 1; n <= 3; ++n)
+				check("PR_MP_PROP_OFFG%d_t0_v0", n);
+			for (const char* special : {"PR_MP_PROP_18_t0_v0_CESP", "PR_MP_PROP_62_t0_v0_CESP", "PR_MP_PROP_CLUBH4_t0_v0_CESP", "PR_MP_PROP_OFF2_t0_v0_CESP"})
+				property_price_check(special, category, best_hash, best_price);
 		}
 
-		return nullptr;
-	}
-
-	inline void ensure_live_catalog(rage::joaat_t want_hash)
-	{
-		if (g_net_catalog)
-			return;
-
-		static bool failure_logged = false;
-
-		if (!g_pointers->m_gta.m_get_native_handler)
-		{
-			if (!failure_logged)
-			{
-				failure_logged = true;
-				LOG(WARNING) << "free_shopping: native handler lookup unavailable";
-			}
-			return;
-		}
-
-		constexpr NativeIndex probes[] = {
-		    NativeIndex::NET_GAMESERVER_GET_PRICE,
-		    NativeIndex::NET_GAMESERVER_CATALOG_ITEM_IS_VALID,
-		    NativeIndex::NET_GAMESERVER_GET_CATALOG_CLOUD_CRC,
-		    NativeIndex::NET_GAMESERVER_IS_CATALOG_CURRENT,
-		    NativeIndex::NET_GAMESERVER_CATALOG_IS_VALID,
-		};
-
-		catalog_scan_stats stats;
-		for (auto idx : probes)
-		{
-			const auto handler = g_pointers->m_gta.m_get_native_handler(g_pointers->m_gta.m_native_registration_table, g_crossmap[static_cast<std::size_t>(idx)]);
-			if (!handler)
-				continue;
-
-			stats.handlers++;
-			if (auto found = scan_handler_for_catalog(handler, want_hash, stats))
-			{
-				g_net_catalog = found;
-				LOG(INFO) << "free_shopping: NetCatalog resolved via native handler " << static_cast<int>(idx);
-				return;
-			}
-		}
-
-		if (!failure_logged)
-		{
-			failure_logged = true;
-			LOG(INFO) << "free_shopping: NetCatalog not resolved (handlers " << stats.handlers << " functions " << stats.functions << " candidates " << stats.candidates << " best " << static_cast<void*>(stats.best) << " buckets " << stats.best_buckets << " version " << stats.best_version << " crc " << stats.best_crc << ")";
-		}
-	}
-
-	inline bool live_item_info_for_hash(rage::joaat_t item_hash, catalog_item_info& out)
-	{
-		if (!item_hash || !g_net_catalog)
-			return false;
-
-		__try
-		{
-			bool found = false;
-			g_net_catalog->ForEachItem([&](const rage::netCatalogBaseItem& item) {
-				if (found)
-					return;
-				if (item.m_Hash == item_hash)
-				{
-					out.stat_value = item.m_StatValue;
-					out.category   = item.m_CategoryHash;
-					found          = true;
-				}
-			});
-			return found;
-		}
-		__except (EXCEPTION_EXECUTE_HANDLER)
-		{
-			return false;
-		}
-	}
-
-	inline bool live_cheapest_for_stat(int stat_value, rage::joaat_t category, rage::joaat_t& out_hash, int& out_price)
-	{
-		if (!g_net_catalog)
-			return false;
-
-		__try
-		{
-			rage::joaat_t stat_hash = 0;
-			rage::joaat_t any_hash  = 0;
-			int stat_price          = INT_MAX;
-			int any_price           = INT_MAX;
-
-			g_net_catalog->ForEachItem([&](const rage::netCatalogBaseItem& entry) {
-				if (entry.m_CategoryHash != category)
-					return;
-				if (entry.m_Price < 0)
-					return;
-				if (entry.m_StatValue == stat_value && entry.m_Price < stat_price)
-				{
-					stat_hash  = entry.m_Hash;
-					stat_price = entry.m_Price;
-				}
-				if (entry.m_Price < any_price)
-				{
-					any_hash  = entry.m_Hash;
-					any_price = entry.m_Price;
-				}
-			});
-
-			if (stat_hash && stat_price <= any_price)
-			{
-				out_hash  = stat_hash;
-				out_price = stat_price;
-				return true;
-			}
-			if (any_hash)
-			{
-				out_hash  = any_hash;
-				out_price = any_price;
-				return true;
-			}
-		}
-		__except (EXCEPTION_EXECUTE_HANDLER)
-		{
-			return false;
-		}
-		return false;
-	}
-
-	inline bool item_info_for_hash(rage::joaat_t item_hash, catalog_item_info& out)
-	{
-		if (!item_hash)
-			return false;
-
-		ensure_live_catalog(item_hash);
-
-		return live_item_info_for_hash(item_hash, out);
-	}
-
-	inline bool get_cheapest_for_stat(int stat_value, rage::joaat_t category, rage::joaat_t& out_hash, int& out_price)
-	{
-		if (!g_net_catalog)
-			return false;
-
-		return live_cheapest_for_stat(stat_value, category, out_hash, out_price);
+		cache->done  = true;
+		cache->hash  = best_hash;
+		cache->price = best_price;
+		out_hash     = best_hash;
+		out_price    = best_price;
+		return best_hash != 0;
 	}
 
 	constexpr rage::joaat_t discount_modifiers[] = {
@@ -484,15 +246,11 @@ namespace big::free_shopping
 			return;
 		}
 
-		catalog_item_info info;
-		const bool have_info = item_info_for_hash(item_hash, info) || item_info_for_hash(key_hash, info);
-
-		if (current_basket_category == category_casino_chips || (have_info && is_chip_category(info.category)))
+		if (current_basket_category == category_casino_chips)
 		{
-			if (g_enabled)
-				LOG(INFO) << "free_shopping: chip basket line " << HEX_TO_UPPER(static_cast<std::uint32_t>(key_hash)) << '/' << HEX_TO_UPPER(static_cast<std::uint32_t>(item_hash)) << " price " << price << " quantity " << quantity;
+			LOG(INFO) << "free_shopping: chip basket line " << HEX_TO_UPPER(static_cast<std::uint32_t>(key_hash)) << '/' << HEX_TO_UPPER(static_cast<std::uint32_t>(item_hash)) << " price " << price << " quantity " << quantity;
 
-			if (current_basket_action == action_casino_chips_spend && price == 1 && quantity > 1 && (key_hash == casino_chips_item || item_hash == casino_chips_item))
+			if (price == 1 && quantity > 1 && (key_hash == casino_chips_item || item_hash == casino_chips_item))
 			{
 				LOG(INFO) << "free_shopping: casino chip spend " << quantity << " -> 1";
 				src->set_return_value<BOOL>(NETSHOPPING::NET_GAMESERVER_BASKET_ADD_ITEM(reinterpret_cast<Any*>(item_data), 1));
@@ -503,28 +261,23 @@ namespace big::free_shopping
 			return;
 		}
 
-		if (is_property_action(current_basket_action) || (have_info && is_property_category(info.category)))
+		if (is_property_action(current_basket_action))
 		{
 			if (price > 0)
 			{
-				if (have_info)
+				const auto category = current_basket_action == "NET_SHOP_ACTION_BUY_WAREHOUSE"_J ? category_warehouse : category_property;
+
+				rage::joaat_t best_hash = 0;
+				int best_price          = 0;
+				if (cheapest_for_category(category, best_hash, best_price) && best_price < price)
 				{
-					rage::joaat_t best_hash = 0;
-					int best_price          = 0;
-					if (get_cheapest_for_stat(info.stat_value, info.category, best_hash, best_price) && best_hash && best_price < price)
-					{
-						LOG(INFO) << "free_shopping: property item " << HEX_TO_UPPER(static_cast<std::uint32_t>(key_hash)) << '/' << HEX_TO_UPPER(static_cast<std::uint32_t>(item_hash)) << " category " << HEX_TO_UPPER(static_cast<std::uint32_t>(info.category)) << " stat " << info.stat_value << " price " << price << " -> " << HEX_TO_UPPER(static_cast<std::uint32_t>(best_hash)) << " price " << best_price;
-						item_data->item  = best_hash;
-						item_data->price = best_price;
-					}
-					else
-					{
-						LOG(INFO) << "free_shopping: property item " << HEX_TO_UPPER(static_cast<std::uint32_t>(key_hash)) << '/' << HEX_TO_UPPER(static_cast<std::uint32_t>(item_hash)) << " category " << HEX_TO_UPPER(static_cast<std::uint32_t>(info.category)) << " stat " << info.stat_value << " price " << price << " (no cheaper candidate)";
-					}
+					LOG(INFO) << "free_shopping: property item " << HEX_TO_UPPER(static_cast<std::uint32_t>(key_hash)) << '/' << HEX_TO_UPPER(static_cast<std::uint32_t>(item_hash)) << " price " << price << " -> " << HEX_TO_UPPER(static_cast<std::uint32_t>(best_hash)) << " price " << best_price;
+					item_data->item  = best_hash;
+					item_data->price = best_price;
 				}
 				else
 				{
-					LOG(INFO) << "free_shopping: property item " << HEX_TO_UPPER(static_cast<std::uint32_t>(key_hash)) << '/' << HEX_TO_UPPER(static_cast<std::uint32_t>(item_hash)) << " not found in catalog";
+					LOG(INFO) << "free_shopping: property item " << HEX_TO_UPPER(static_cast<std::uint32_t>(key_hash)) << '/' << HEX_TO_UPPER(static_cast<std::uint32_t>(item_hash)) << " no cheaper candidate";
 				}
 			}
 
