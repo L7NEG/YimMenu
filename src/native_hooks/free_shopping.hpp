@@ -1,7 +1,7 @@
 #pragma once
-#include "game/features/recovery/free_shopping_data.hpp"
 #include "invoker/invoker.hpp"
 #include "native_hooks.hpp"
+#include "pointers.hpp"
 #include "types/netshop/netCatalog.hpp"
 
 #include "memory/module.hpp"
@@ -96,6 +96,9 @@ namespace big::free_shopping
 		if (g_net_catalog)
 			return;
 
+		if (!g_pointers->m_gta.m_get_native_handler)
+			return;
+
 		constexpr NativeIndex probes[] = {
 		    NativeIndex::NET_GAMESERVER_GET_PRICE,
 		    NativeIndex::NET_GAMESERVER_CATALOG_ITEM_IS_VALID,
@@ -103,7 +106,8 @@ namespace big::free_shopping
 		};
 		for (auto idx : probes)
 		{
-			if (auto handler = native_invoker::get_handlers()[static_cast<int>(idx)])
+			const auto handler = g_pointers->m_gta.m_get_native_handler(g_pointers->m_gta.m_native_registration_table, g_crossmap[static_cast<std::size_t>(idx)]);
+			if (handler)
 			{
 				if (auto found = scan_handler_for_catalog(handler, want_hash))
 				{
@@ -171,39 +175,17 @@ namespace big::free_shopping
 		ensure_live_catalog(item_hash);
 
 		if (g_net_catalog)
-		{
-			if (int stat = live_stat_for_hash(item_hash); stat != -1)
-				return stat;
-		}
-
-		for (const auto& entry : data::property_stats)
-		{
-			if (entry.m_hash == item_hash)
-				return entry.m_stat_value;
-		}
+			return live_stat_for_hash(item_hash);
 
 		return -1;
 	}
 
 	inline bool get_cheapest_for_stat(int stat_value, rage::joaat_t& out_hash, int& out_price)
 	{
-		if (g_net_catalog)
-		{
-			if (live_cheapest_for_stat(stat_value, out_hash, out_price))
-				return true;
-		}
+		if (!g_net_catalog)
+			return false;
 
-		for (const auto& entry : data::cheapest_by_stat)
-		{
-			if (entry.m_stat_value == stat_value)
-			{
-				out_hash  = entry.m_hash;
-				out_price = entry.m_price;
-				return true;
-			}
-		}
-
-		return false;
+		return live_cheapest_for_stat(stat_value, out_hash, out_price);
 	}
 
 	constexpr rage::joaat_t discount_modifiers[] = {
